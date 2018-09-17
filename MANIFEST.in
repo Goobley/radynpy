@@ -1,0 +1,3 @@
+include README.rst
+include radynpy/RadynFormatHelp.pickle
+include radynpy/RadynKeySizes.pickle
