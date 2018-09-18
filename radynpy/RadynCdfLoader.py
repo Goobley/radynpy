@@ -84,6 +84,41 @@ class RadynData:
                     s += ('  %s: %s\n' % (info[0], info[1].replace('\n', '\n    ')))
         return s
 
+class LazyRadynData:
+
+    def __init__(self, cdfHandle):
+        self.cdf = cdfHandle
+
+    def __getattr__(self, name):
+        if name in allVars:
+            setattr(self, name, self.cdf[name][...])
+            return getattr(self, name)
+        else:
+            raise AttributeError('Unknown attribute "%s" requested' % name)
+    
+    def index_convention(self):
+        return index_convention()
+
+    def var_info(self, var):
+        return var_info(var)
+
+    def __repr__(self):
+        s = 'RadynData: Variables loaded:\n'
+        for k in self.__dict__.keys():
+            info = maybe_lookup(allVars, k)
+            if info is None:
+                s += ('  %s\n' % k)
+            else:
+                s += ('  %s: %s\n' % (info[0], info[1].replace('\n', '\n    ')))
+        return s
+
+    def close(self):
+        if self.cdf is not None:
+            self.cdf.close()
+            self.cdf = None
+
+    def __del__(self):
+        self.close()
 
 def load_vars(cdfPath, varList, parseFilenameParams=True):
     if type(varList) is str:
@@ -118,19 +153,52 @@ def load_vars(cdfPath, varList, parseFilenameParams=True):
         res.notLoadedVars = notLoadedVars
 
     cdfFilename = os.path.basename(cdfPath)
-    if parseFilenameParams and cdfFilename.startswith('radyn_out.'):
-        p = cdfFilename[cdfFilename.find('.')+1:]
-        params = p.split('_')
-        res.filenameParams = params
-        if len(params) != 6:
-            raise ValueError('FilenameParams should contain 6 underscore seperated terms.\n'
-                             'See FCHROMA simulation documentation for examples.\n'
-                             'If you don\'t want to parse these then call with parseFilenameParams=False')
-        res.startingModelAtmosphere = params[0]
-        res.beamSpectralIndex = float(params[1][1:])
-        res.totalBeamEnergy = float(params[2])
-        res.beamPlulseType = params[3]
-        res.cutoffEnergy = params[4]
-        res.beamType = params[5]
+    if cdfFilename != 'radyn_out.cdf':
+        if parseFilenameParams and cdfFilename.startswith('radyn_out.'):
+            p = cdfFilename[cdfFilename.find('.')+1:]
+            params = p.split('_')
+            res.filenameParams = params
+            if len(params) != 6:
+                raise ValueError('FilenameParams should contain 6 underscore seperated terms.\n'
+                                'See FCHROMA simulation documentation for examples.\n'
+                                'If you don\'t want to parse these then call with parseFilenameParams=False')
+            res.startingModelAtmosphere = params[0]
+            res.beamSpectralIndex = float(params[1][1:])
+            res.totalBeamEnergy = float(params[2])
+            res.beamPlulseType = params[3]
+            res.cutoffEnergy = params[4]
+            res.beamType = params[5]
 
     return res
+
+def lazy_load_all(cdfPath, parseFilenameParams=True):
+    cdf = pycdf.CDF(cdfPath)
+    res = LazyRadynData(cdf)
+    for var in allVars.keys():
+        # Just load all the scalar values, they're small enough, and most of them are
+        # important
+        if typeDict[var] == 'Val':
+            setattr(res, var, res.cdf[var][...].item())
+    if len(res.cdf.attrs) > 0:
+        for k in res.cdf.attrs:
+            setattr(res, k, str(res.cdf.attrs[k]))
+
+    cdfFilename = os.path.basename(cdfPath)
+    if cdfFilename != 'radyn_out.cdf':
+        if parseFilenameParams and cdfFilename.startswith('radyn_out.'):
+            p = cdfFilename[cdfFilename.find('.')+1:]
+            params = p.split('_')
+            res.filenameParams = params
+            if len(params) != 6:
+                raise ValueError('FilenameParams should contain 6 underscore seperated terms.\n'
+                                'See FCHROMA simulation documentation for examples.\n'
+                                'If you don\'t want to parse these then call with parseFilenameParams=False')
+            res.startingModelAtmosphere = params[0]
+            res.beamSpectralIndex = float(params[1][1:])
+            res.totalBeamEnergy = float(params[2])
+            res.beamPlulseType = params[3]
+            res.cutoffEnergy = params[4]
+            res.beamType = params[5]
+
+    return res
+
