@@ -2,7 +2,7 @@ import pickle
 import re
 from itertools import permutations
 from collections import deque
-from AuxTypes import Val, Array, Unknown
+from radynpy.AuxTypes import Val, Array, Unknown
 
 with open('RadynKeySizes.pickle', 'rb') as p:
     keys = pickle.load(p)

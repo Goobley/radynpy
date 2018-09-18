@@ -2,7 +2,7 @@ import os
 os.environ['CDF_LIB'] = '/usr/local/cdf/lib'
 from spacepy import pycdf
 import pickle
-from AuxTypes import Val, Array
+from radynpy.AuxTypes import Val, Array
 
 cdfFile = '/local1/scratch/RadynGrid/radyn_out.val3c_d3_1.0e11_t20s_10kev_fp'
 

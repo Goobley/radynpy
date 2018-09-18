@@ -1,6 +1,7 @@
 import pickle
 import os
 from spacepy import pycdf
+
 fileLocation = os.path.dirname(os.path.abspath(__file__)) + '/'
 with open(fileLocation + 'RadynFormatHelp.pickle', 'rb') as p:
     helpInfo = pickle.load(p)
