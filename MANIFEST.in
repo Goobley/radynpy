@@ -1,3 +1,4 @@
 include README.rst
-include radynpy/RadynFormatHelp.pickle
-include radynpy/RadynKeySizes.pickle
+include radynpy/RadynCdfLoader/RadynFormatHelp.pickle
+include radynpy/RadynCdfLoader/RadynKeySizes.pickle
+include radynpy/matsplotlib/opctab.dat
