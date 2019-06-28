@@ -8,13 +8,71 @@ from matplotlib.ticker import MaxNLocator, LogLocator, ScalarFormatter
 import warnings
 from radynpy.matsplotlib import xt_calc
 
-def contrib_fn(cdf, kr, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu=-1, 
-               tStep=0, heatPerParticle=False, flux=False, wingOffset=None,
+def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu=-1, 
+               heatPerParticle=False, wingOffset=None,
                dvMouseover=False, withBackgroundOpacity=True, colors={}, 
                tightenLayout=True, printMiscTopData=True, stdoutInfo=False, returnData=False,
                opctabPath=None):
+    '''
+    Plots the contribution function of a transition. Based on the original 4
+    panel Mats Carlsson plot, but using the 6 panel layout of Paulo Simoes.
+    Gratefully developed from the IDL scripts of M. Carlsson, G. Kerr, and P. Simoes.
+    This function produces a plot in matplotlib, that will then need to be shown or printed.
+
+    Parameters
+    ----------
+    cdf : LazyRadynData or RadynData
+        The RadynData object containing the data to compute the contribution function from.
+        Due to the number of variables required, it is easier to use a LazyRadynData, if possible.
+    kr : int
+        The transition index, see `index_convention` and `var_info` on the RadynData object for 
+        more information about what this means.
+    tStep : int, optional
+        The time index at which to compute the contribution function see 't' in the `index_convention`
+        of RadynData for more information. (default: 0)
+    yRange : list of float, optional
+        The height range to plot over, in Mm. (default: [-0.08, 2.5])
+    vRange : list of float, optional
+        The velocity range to plot over (converted to a wavelength range around the transition core). (default: [-300, 300])
+    mu : int, optional
+        Index of the mu ray to be used. Default is the closest to the normal to the atmosphere. (default: -1)
+    heatPerParticle : bool, optional
+        Display heating per particle or per unit volume. (default: False)
+    wingOffset : float, optional
+        The offset of the slice to take through the wing in Angstrom from the line core.
+    dvMouseover : bool, optional
+        Display the mouseover x-values in units of velocity (default: False, angstrom are used).
+    withBackgroundOpacity : bool, optional
+        Include the background opacity at this wavelength in the calculation. (default: True)
+    colors : dict[str, str], optional
+        Dictionary of line names and the hex code to color them.
+        Keys and default values:
+            'tau': Color('OrangeRed').hex,
+            'vz': Color('Chocolate').hex,
+            'sv': Color('OrangeRed').hex,
+            'bb': Color('LightSeaGreen').hex,
+            'pop1': Blues_9.mpl_colors[3],
+            'pop2': Blues_9.mpl_colors[6],
+            'ne': Color('Coral').hex,
+            'line': Color('LightSeaGreen').hex,
+            'temp': Color('OrangeRed').hex,
+            'cf': Blues_9.mpl_colors[6],
+            'heat': Color('Salmon').hex,
+            'core': Blues_9.mpl_colors[6],
+            'wing': Blues_9.mpl_colors[3]
+    tightenLayout : bool, optional
+        Tighten the whitespace around the plots. (default: True)
+    printMiscTopData : bool, optional
+        Add data describing the plot to the top of the figure (line, frequency, timestep...). (default: True) 
+    stdoutInfo : bool, optional
+        Print progress information to stdout. (default: False)
+    returnData : bool, optional
+        Return a dictionary of the data computed to produce the plots. (default: False)
+    opctab : str, optional
+        Path to non-standard opctab.dat if needed. (default: False)
+    '''
     with warnings.catch_warnings():
-        # There are a few log10(0) in here with naturally raise annoying RuntimeWarnings
+        # There are a few log10(0) in here which naturally raise annoying RuntimeWarnings
         # They're not a real problem though, so we'll ignore them for this function
         warnings.simplefilter('ignore', RuntimeWarning)
         # This function works in ~ 2 parts, computation, and then lots and lots of plotting
@@ -56,8 +114,6 @@ def contrib_fn(cdf, kr, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu=-1,
         # z3 = 1 / tau
         # z4 = S (source fn)
         ny0 = wlIdxs[0]
-        if flux:
-            raise NotImplementedError('Flux not yet implemented!')
 
         z1Local = x_ny[:, wlIdxs] / cdf.zmu[mu]
         z2 = tauq_ny[:, wlIdxs] * np.exp(-tauq_ny[:, wlIdxs] / cdf.zmu[mu])
