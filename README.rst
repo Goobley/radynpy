@@ -1,7 +1,8 @@
 RadynPy
 -------
 
-## IMPORTANT NOTE
+IMPORTANT NOTE
+--------------
 Currently my fork of cdflib is required. This can be found [here](https://github.com/Goobley/radynpy) 
 and installed with pip by `pip install 'git+https://github.com/Goobley/cdflib.git'`
 Please install cdflib prior to radynpy, although the latter should shout at you if it is not present.
