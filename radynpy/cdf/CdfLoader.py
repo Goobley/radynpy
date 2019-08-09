@@ -1,10 +1,7 @@
 import pickle
 import os
 import numpy as np
-try:
-    import cdflib
-except:
-    print('Make sure to install the version of cdflib from github.com/Goobley/cdflib (pip install \'git+https://github.com/Goobley/cdflib.git\')')
+import cdflib
 
 fileLocation = os.path.dirname(os.path.abspath(__file__)) + '/'
 with open(fileLocation + 'RadynFormatHelp.pickle', 'rb') as p:
