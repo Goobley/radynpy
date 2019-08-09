@@ -5,7 +5,7 @@ def readme():
         return f.read()
 
 setup(name='radynpy',
-      version='0.4.2',
+      version='0.4.3',
       description='Analysis tools for Radyn in Python',
       long_description=readme(),
       url='http://github.com/Goobley/radynpy',

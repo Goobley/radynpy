@@ -31,7 +31,7 @@ the F-CHROMA style (i.e. with the heating parameters), if your filename does
 not fit this style then both classes take a ``parseFilenameParams=False``
 kwarg.
 
-Contribution functions can be plotted using ``radynpy.matsplotlib.contib_fn`.
+Contribution functions can be plotted using ``radynpy.matsplotlib.contib_fn``.
 See the extensive docstring of this function for more information. Utilities
 used in the calculation of the contribution function can be found in
 ``radynpy.matsplotlib.utils`` and ``radynpy.matsplotlib.opacity``. For the
