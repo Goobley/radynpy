@@ -3,53 +3,38 @@ RadynPy
 
 IMPORTANT NOTE
 --------------
-Currently my fork of cdflib is required. This can be found [here](https://github.com/Goobley/radynpy) 
-and installed with pip by `pip install 'git+https://github.com/Goobley/cdflib.git'`
-Please install cdflib prior to radynpy, although the latter should shout at you if it is not present.
-Hopefully some of these changes will be merged into cdflib in good time, and this step will no longer be required.
 
-This is a very early development release of RadynPy, a nascent suite of tools to allow 
-analysis of Radyn simulations to be performed in Python.
+This is an early development release of RadynPy, a nascent suite of tools to
+allow analysis of Radyn simulations to be performed in Python. It contains a
+minimal set of features to perform analysis of Radyn CDF files, and produce
+contribution functions.
 
 If you don't know what Radyn is, then this package is probably not aimed at you!
 
-Currently the only class that is designed to be used is RadynData (and LazyRadynData), 
-which can be used to load the `.cdf` files created by Radyn.
+The easiest way to load a CDF file is to use ``radynpy.cdf.LazyRadynData``. An
+object can be constructed by passing the path to a Radyn CDF file. Data is
+loaded lazily as it is requested. The normal keys of this file can then be
+accessed by ``.`` notation (e.g. data.tg1). To look at the indexing convention
+and the data layout (which is different to IDL due to handling of the record
+time axis), the functions ``index_convention``, and for information on a
+specific variable, or set of variables, ``var_info`` can be used. ``var_info``
+takes a string or list of strings for the variables of interest (this string
+may be '*' to print information on all variables).
 
-This module exposes the functions: `index_convention`, `var_info`,
-`load_vars`, and `lazy_load_all`.
+The class ``radynpy.cdf.RadynData`` also exists, it takes the path to a CDF
+file, and a list of keys to be loaded (or '*' for everything). It performs
+similarly to LazyRadynData, but a key that was not requested at construction
+will not be loaded.
 
-* Calling `index_convention` prints the indexing convention used in `var_info`.
-* `var_info` takes a `str` or list of `str` and prints the meaning of the
-  associated variables, along with their dimensionality in the indexing
-  convention used. `var_info` can also take '*' as an argument, for which it
-  will return the info on all variables.
-* `load_vars` takes the path to a CDF file and a list of the required variables
-  which are then loaded into an instance of `RadynData` and can now be accesed
-  as `.varName` rather than needing to go via the strings.
-  If the filename is in the FCHROMA format then the heating parameters will be
-  parsed from the string. If the filename is simply `radyn_out.cdf` then the
-  filename isn't scanned for parameters. If the filename is a different format
-  then you may need to pass `parseFilenameParams=False` to `load_vars`.
-  `load_vars` can also take '*' as an argument, for which it
-  will load all variables and timesteps into memory.
-* `lazy_load_all` loads all of the variables in the CDF in a lazy manner,
-  meaning that they are only loaded into memory when called for the first time.
-  This has the unfortunate side effect of needing to keep a handle to the CDF
-  file open, so ideally the `close()` method should be called when you are
-  done with the file, and not opening thousands (!) of CDF files
-  simulataneously. For just a few files the call to `close()` isn't too
-  important as the class attempts to clean up after itself as much as
-  possible. This mode is very good for easy exploration of CDF files as the
-  requested variables do not need to be known a priori,
-  making it easier to use in the REPL, without thehuge memory requirements of
-  loading all of the variables from a file. `lazy_load_all` behaves in the
-  same way as `load_vars` with respect to parsing the filename parameters,
-  and also accepts the `parseFilenameParams` keyword.
+**NOTE:** By default both ``RadynData`` and ``LazyRadynData`` expect a filename in
+the F-CHROMA style (i.e. with the heating parameters), if your filename does
+not fit this style then both classes take a ``parseFilenameParams=False``
+kwarg.
 
-I expect that `lazy_load_all` will become the prevailing mode of use, but in
-scripts where a large number of simulations (e.g. the grid) are being
-processed then `load_vars` will probably work out slightly more efficient.
+Contribution functions can be plotted using ``radynpy.matsplotlib.contib_fn`.
+See the extensive docstring of this function for more information. Utilities
+used in the calculation of the contribution function can be found in
+``radynpy.matsplotlib.utils`` and ``radynpy.matsplotlib.opacity``. For the
+most part these are very simple functions and classes that mirror the
+counterparts in the Radyn software distribution produced by M. Carlsson.
 
-
-This documentation will be fleshed out more in time, this is but a very early alpha release.

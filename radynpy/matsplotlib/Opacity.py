@@ -4,6 +4,8 @@ import struct
 import os
 here = os.path.dirname(os.path.abspath(__file__)) + '/'
 
+# Almost everything in here is a verbatim translation of the Radyn IDL routines
+# supplied by M. Carlsson, many improvements could be made for pythonic-ness
 
 class OpcFile:
     def __init__(self, path=None):
