@@ -207,3 +207,47 @@ def hydrogen_absorption(xlamb, icont, temp, ne, nh): #xconth, xconth_lte):
 
     xconth=abhmbf+abhmff+abhbf+abhff
     return xconth, xconth_lte
+
+def planck_fn(wvls = [], tg = [], *args):
+
+    '''
+    Calculates the Planck fn in units of 
+    [ergs /s / cm^2 / sr / ang] given wavelength
+    in angstrom and temperature in Kelvin. 
+
+    e.g. to produce the Planck Fn at 5800K 
+    from 2000 to 10000 A every 1 angstrom:
+        wvls = np.arange(2000,10001,1,dtype=float)
+        bb = planck_fn(wvls, tg=5800.00)
+
+    Parameters
+    __________
+
+    wvls : float
+           the wavelength(s)
+    tg : float
+         gas temperature 
+   
+    Graham Kerr, Feb 18th 2020
+
+    '''
+
+    # Convert to np array in case it is in input 
+    # as a regular list
+    wvls = np.array(wvls)
+    tg = np.array(tg)
+
+    # Convert to wavelength in cm
+    w = wvls / 1.0e8 
+
+    # Constants appropriate to cgs units.
+    c1 =  3.7417749e-05     # =2*!DPI*h*c*c       
+    c2 =  1.4387687e0       # =h*c/k
+
+    bbflux = np.zeros([len(wvls),len(tg)],dtype=float)
+    for i in range(len(tg)):
+        bbflux[:,i] =  ([c1 / ( x**5 * ( np.exp( c2/tg[i]/x )-1.e0 ) ) for x in w]) 
+
+    bbint = bbflux*1.0e-8/np.pi
+
+    return bbint
