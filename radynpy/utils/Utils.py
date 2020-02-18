@@ -43,6 +43,42 @@ def gaunt_factor(n, qf):
 
     return gaunt
 
+def gaunt_bf(wvls = [], n = 1, Z = 1, *args):
+
+    '''
+    Calculates the bound-free Gaunt fn for a given 
+    wavelength and quantum number.
+
+    M. J. Seaton (1960), Rep. Prog. Phys. 23, 313
+
+    This is the same calculation that is used in
+    RH 
+
+    Parameters
+    __________
+
+    wvls : float
+            the wavelength(s)
+    n : int, optional
+        Principal quantum number (default = 1) 
+    Z : int, optional
+        charge (default = 1)
+
+
+    Graham Kerr, Feb 17th 2020
+
+    '''
+    gbf = []
+    for i in range(len(wvls)):
+        x    = (6.626e-27 * 3e18) / wvls[i] / (2.1799e-11 * Z**2)
+        x3   = x**(0.33333333e0)
+        nsqx = 1e0 / (n**2 * x)     
+
+        gbf.append(1e0 + 0.1728*x3 * (1e0 - 2e0*nsqx) - 0.0496*(x3)**2 * (1e0 - (1e0 - nsqx)*0.66666667*nsqx))
+
+     
+    return gbf
+
 def hydrogen_bf_profile(wl, z, i):
     # ;+
     # ;   prfhbf(wl,z,i)
