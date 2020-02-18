@@ -1,8 +1,8 @@
 import numpy as np
-from radynpy.utils import gaunt_bf 
+from radynpy.utils import gaunt_bf, planck_fn
 
 
-def contin_cfn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
+def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
                       include_metals = True, include_helium = True, 
                       scatt = True):
 
@@ -99,8 +99,8 @@ def contin_cfn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     stim_term = np.zeros([len(wavels_ang),cdf.ndep,len(isteps)], dtype=float)
     stim_term_2 = np.zeros([len(wavels_ang),cdf.ndep,len(isteps)], dtype=float)
     for i in range(len(isteps)):
-        stim_term[:,:,i] = [1e0 - np.exp( hc_k / (x * tg1[isteps[i],:]) *(-1e0) ) for x in wavels_ang]
-        stim_term_2[:,:,i] = [np.exp( hc_k / (x * tg1[isteps[i],:]) * (-1e0) ) for x in wavels_ang]
+        stim_term[:,:,i] = [1e0 - np.exp( hc_k / (x * cdf.tg1[isteps[i],:]) *(-1e0) ) for x in wavels_ang]
+        stim_term_2[:,:,i] = [np.exp( hc_k / (x * cdf.tg1[isteps[i],:]) * (-1e0) ) for x in wavels_ang]
 
     # The constant terms used in the calc of emissivity.
     jcoeff = np.zeros([len(nu),cdf.ndep,len(isteps)], dtype=float)
@@ -120,7 +120,10 @@ def contin_cfn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     phot_crss_5 = phot_const / (5.**5.) * (cc_ang/wavels_ang)**(-3.0) * gauntbf5
 
 
-   # #Planck Fn (erg/s/cm2/sr/Ang)
+    # Planck Fn (erg/s/cm2/sr/Ang)
+    SourceBp = np.zeros([num_waves, cdf.ndep, num_times], dtype = np.float)
+    for i in range(cdf.ndep):
+        SourceBp[:,i,:] = planck_fn(wavels_ang, tg=cdf.tg1[isteps,i]) 
    # SourceBp = np.zeros([cdf.ndep], dtype = np.float)
    # for i =0, ndep-1 do begin
    #              SourceBp[i] = planck_fn_radyn(wavels_ang,tg1t[i,istep]) / !dpi
@@ -130,7 +133,7 @@ def contin_cfn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
    # RADYN essentially uses LTE value
     bhmin = 1e0
 
-    out = {'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2, 'gff':gff}
+    out = {'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2, 'gff':gff, 'SourceBp':SourceBp}
 
     return out
 
