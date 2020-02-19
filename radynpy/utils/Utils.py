@@ -299,7 +299,7 @@ def prfhbf_rad(wvls = [], Z = 1, n=6, *args):
             frq = 2.9979e18/wvls[i]
 
             gau = gaunt_factor(n,frq)
-            print(gau)
+            
             pr0 = 1.04476e-14*Z*Z*Z*Z
     
             a5 = n**5
