@@ -251,3 +251,65 @@ def planck_fn(wvls = [], tg = [], *args):
     bbint = bbflux*1.0e-8/np.pi
 
     return bbint
+
+
+def prfhbf_rad(wvls = [], Z = 1, n=6, *args):
+
+    '''
+    A function to return the absorption 
+    cross section fr a hydrogenic ion 
+
+    *** Originaly from abshyd.pro subroutine
+        in RADYN, and uses Fortran indexing.
+        Using this code to ensure that we 
+        compute the upper level contribution
+        to the opacity in the same way that 
+        RADYN does internally.
+
+    Parameters
+    __________
+
+    wvls : float
+            the wavelength(s)
+    n : int, optional
+        The level from which absorption
+        takes place. FORTRAN NUMBERING, legacy
+        from RADYN (default = 6, i.e. level 5)
+    Z : int, optional
+        charge (default = 1)
+
+
+    Graham Kerr, Feb 19th 2020
+
+    '''
+    wvls = np.array(wvls)
+
+    prfhbf = np.zeros([len(wvls)],dtype=float)
+
+    wl0 = 911.7535278/(Z*Z)*n*n
+
+    for i in range(len(wvls)):
+
+        if (wvls[i] > wl0):    
+          
+            prfhbf[i] = 0.0
+        
+        else: 
+    
+            frq = 2.9979e18/wvls[i]
+
+            gau = gaunt_factor(n,frq)
+            print(gau)
+            pr0 = 1.04476e-14*Z*Z*Z*Z
+    
+            a5 = n**5
+            a5 = np.float(a5)
+
+            wm = wvls[i]*1.0e-4
+
+            wm3 = wm*wm*wm
+
+            prfhbf[i] = pr0*wm3*gau/a5
+
+     
+    return prfhbf
