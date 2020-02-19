@@ -42,9 +42,10 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     This uses the routines in opacity.py, in radynpy.matsplotlib to read opcatb.dat   
     '''
 
-    ######
+    ########################################################################
     # Some preliminary set up and constants
-    #####
+    ########################################################################
+
     
 
     # Turn the inputs into numpy arrays
@@ -81,30 +82,30 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     gauntbf5 = gaunt_bf(wavels_ang, n=5.)
 
     # Free-free gaunt factor (from Gray pf 149)
-    gff = np.zeros([len(wavels_ang),cdf.ndep,len(isteps)], dtype=float)
-    for i in range(len(isteps)):
+    gff = np.zeros([num_waves,cdf.ndep,num_times], dtype=float)
+    for i in range(num_times):
         gff[:,:,i] = [1.0 + 3.3512 * x**(-0.3333333) * (6.95e-9 * x * cdf.tg1[isteps[i],:] + 0.5) for x in wavels_ang]
 
 
 
     # Ratio of protons in nlte to ratio of protons assuming lte, for 
     # use in the calculation of the nlte b-f opacity 
-    # NOTE:  n* in mihalis is b_c * nstart[*,level]
+    # NOTE:  n* in mihalis is b_c * nstar[*,level]
     b_c = cdf.n1[:,:,cdf.nk[iel]-1,iel] / cdf.nstar[:,:,cdf.nk[iel]-1,iel]
     b_c_he = cdf.n1[:,:,5,2] / cdf.nstar[:,:,5,2]
 
 
     # Terms used in the stimulated emission correction required for 
     # nlte opacity (the negative term in alpha_hbf_nlte)
-    stim_term = np.zeros([len(wavels_ang),cdf.ndep,len(isteps)], dtype=float)
-    stim_term_2 = np.zeros([len(wavels_ang),cdf.ndep,len(isteps)], dtype=float)
-    for i in range(len(isteps)):
+    stim_term = np.zeros([num_waves,cdf.ndep,num_times], dtype=float)
+    stim_term_2 = np.zeros([num_waves,cdf.ndep,num_times], dtype=float)
+    for i in range(num_times):
         stim_term[:,:,i] = [1e0 - np.exp( hc_k / (x * cdf.tg1[isteps[i],:]) *(-1e0) ) for x in wavels_ang]
         stim_term_2[:,:,i] = [np.exp( hc_k / (x * cdf.tg1[isteps[i],:]) * (-1e0) ) for x in wavels_ang]
 
     # The constant terms used in the calc of emissivity.
-    jcoeff = np.zeros([len(nu),cdf.ndep,len(isteps)], dtype=float)
-    for i in range(len(isteps)):
+    jcoeff = np.zeros([len(nu),cdf.ndep,num_times], dtype=float)
+    for i in range(num_times):
         jcoeff[:,:,i] = [2e0 * cdf.hh * x**3.0 / cdf.cc**2.0 * np.exp(-1.0 * cdf.hh * x / (cdf.bk * cdf.tg1[isteps[i],:])) for x in nu]
 
 
@@ -124,16 +125,138 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     SourceBp = np.zeros([num_waves, cdf.ndep, num_times], dtype = np.float)
     for i in range(cdf.ndep):
         SourceBp[:,i,:] = planck_fn(wavels_ang, tg=cdf.tg1[isteps,i]) 
-   # SourceBp = np.zeros([cdf.ndep], dtype = np.float)
-   # for i =0, ndep-1 do begin
-   #              SourceBp[i] = planck_fn_radyn(wavels_ang,tg1t[i,istep]) / !dpi
-   #      endfor
-
+   
    # Assume departure coefficient for H minus is 1 because 
    # RADYN essentially uses LTE value
     bhmin = 1e0
 
-    out = {'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2, 'gff':gff, 'SourceBp':SourceBp}
+   ########################################################################
+   # COMPUTE THE OPACITIES AND EMISSIVITIES     ############          
+   ########################################################################
+   
+   ####
+   # Hydrogren Free-Free
+   ####
+    alpha_hff = np.zeros([num_waves, cdf.ndep, num_times], dtype = float)
+    for i in range(num_waves):
+        for j in range(cdf.ndep):
+            for k in range(num_times):
+                alpha_hff[i,j,k] = (3.69e8 * gff[i,j,k] * (cc_ang/wavels_ang[i])**(-3.0) * 
+                   cdf.tg1[isteps[k],j]**(-0.5) * cdf.ne1[isteps[k],j] * 
+                   cdf.n1[isteps[k],j,cdf.nk[iel]-1,iel] * stim_term[i,j,k])
+                
+   ####
+   # Hydrogen bound-free (RADYN Detailed transitions)
+   ####
+
+    # Calculates the nlte b-f opactity [Mihalis 1978, eq 7-1]  
+    # Calculates the nlte b-f sponataneous thermal emission [Mihalis 1978, eq 7-2] 
+    # -- Does not have higher order terms (see below)
+
+    alpha_hbf_nlte = np.zeros([num_waves, cdf.ndep, num_times], dtype = float)      
+    jbf_hbf_nlte = np.zeros([num_waves, cdf.ndep, num_times], dtype = float)
+
+    # Lyman continuum
+    winds = (np.where(wavels_ang <= 911.0))[0] 
+    if len(winds) != 0:  
+        for i in range(len(winds)):
+            for k in range(num_times):
+                alpha_hbf_nlte[winds[i],:,k] =  ( 
+                    phot_crss_1[winds[i]] * ( cdf.n1[isteps[k],:,0,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,0,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_2[winds[i]] * ( cdf.n1[isteps[k],:,1,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,1,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_3[winds[i]] * ( cdf.n1[isteps[k],:,2,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,2,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_4[winds[i]] * ( cdf.n1[isteps[k],:,3,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,3,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_5[winds[i]] * ( cdf.n1[isteps[k],:,4,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,4,iel] * stim_term_2[winds[i],:,k] ) 
+                                                ) 
+
+                jbf_hbf_nlte[winds[i],:,k] = ( 
+                    jcoeff[winds[i],:,k] * ( 
+                        phot_crss_1[winds[i]] * cdf.nstar[isteps[k],:,0,iel] * b_c[isteps[k],:] +
+                        phot_crss_2[winds[i]] * cdf.nstar[isteps[k],:,1,iel] * b_c[isteps[k],:] +
+                        phot_crss_3[winds[i]] * cdf.nstar[isteps[k],:,2,iel] * b_c[isteps[k],:] +
+                        phot_crss_4[winds[i]] * cdf.nstar[isteps[k],:,3,iel] * b_c[isteps[k],:] +
+                        phot_crss_5[winds[i]] * cdf.nstar[isteps[k],:,4,iel] * b_c[isteps[k],:] )
+                        * (cc_ang)/(wavels_ang[winds[i]])**2.0 
+                                             ) 
+
+    # Balmer continuum
+    winds = (np.where((wavels_ang <= 3646.91) & (wavels_ang > 911.70 )))[0]
+    if len(winds) != 0:  
+        for i in range(len(winds)):
+            for k in range(num_times):
+                alpha_hbf_nlte[winds[i],:,k] =  ( 
+                    phot_crss_2[winds[i]] * ( cdf.n1[isteps[k],:,1,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,1,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_3[winds[i]] * ( cdf.n1[isteps[k],:,2,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,2,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_4[winds[i]] * ( cdf.n1[isteps[k],:,3,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,3,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_5[winds[i]] * ( cdf.n1[isteps[k],:,4,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,4,iel] * stim_term_2[winds[i],:,k] ) 
+                                                )
+            
+                jbf_hbf_nlte[winds[i],:,k] = ( 
+                    jcoeff[winds[i],:,k] * ( 
+                        phot_crss_2[winds[i]] * cdf.nstar[isteps[k],:,1,iel] * b_c[isteps[k],:] +
+                        phot_crss_3[winds[i]] * cdf.nstar[isteps[k],:,2,iel] * b_c[isteps[k],:] +
+                        phot_crss_4[winds[i]] * cdf.nstar[isteps[k],:,3,iel] * b_c[isteps[k],:] +
+                        phot_crss_5[winds[i]] * cdf.nstar[isteps[k],:,4,iel] * b_c[isteps[k],:] )
+                        * (cc_ang)/(wavels_ang[winds[i]])**2.0 
+                                              )  
+
+    # Paschen continuum
+    winds = (np.where((wavels_ang <= 8205.71) & (wavels_ang > 3646.91 )))[0]
+    if len(winds) != 0:
+        for i in range(len(winds)):
+            for k in range(num_times):
+                alpha_hbf_nlte[winds[i],:,k] =  ( 
+                    phot_crss_3[winds[i]] * ( cdf.n1[isteps[k],:,2,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,2,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_4[winds[i]] * ( cdf.n1[isteps[k],:,3,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,3,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_5[winds[i]] * ( cdf.n1[isteps[k],:,4,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,4,iel] * stim_term_2[winds[i],:,k] ) 
+                                                )
+            
+                jbf_hbf_nlte[winds[i],:,k] = ( 
+                     jcoeff[winds[i],:,k] * ( 
+                         phot_crss_3[winds[i]] * cdf.nstar[isteps[k],:,2,iel] * b_c[isteps[k],:] +
+                         phot_crss_4[winds[i]] * cdf.nstar[isteps[k],:,3,iel] * b_c[isteps[k],:] +
+                         phot_crss_5[winds[i]] * cdf.nstar[isteps[k],:,4,iel] * b_c[isteps[k],:] )
+                         * (cc_ang)/(wavels_ang[winds[i]])**2.0 
+                                              )         
+    # Brackett continuum
+    winds = (np.where((wavels_ang <= 14580.1) & (wavels_ang > 8205.71 )))[0]
+    if len(winds) != 0:  
+        for i in range(len(winds)):
+            for k in range(num_times):
+                alpha_hbf_nlte[winds[i],:,k] =  ( 
+                    phot_crss_4[winds[i]] * ( cdf.n1[isteps[k],:,3,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,3,iel] * stim_term_2[winds[i],:,k] ) + 
+                    phot_crss_5[winds[i]] * ( cdf.n1[isteps[k],:,4,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,4,iel] * stim_term_2[winds[i],:,k] ) 
+                                                )
+            
+            jbf_hbf_nlte[winds[i],:,k] = ( 
+                 jcoeff[winds[i],:,k] * ( 
+                     phot_crss_4[winds[i]] * cdf.nstar[isteps[k],:,3,iel] * b_c[isteps[k],:] +
+                     phot_crss_5[winds[i]] * cdf.nstar[isteps[k],:,4,iel] * b_c[isteps[k],:] )
+                     * (cc_ang)/(wavels_ang[winds[i]])**2.0 
+                          ) 
+
+    # Pfund continuum
+    winds = (np.where(wavels_ang > 14580.1))[0]
+    if len(winds) != 0:  
+        for i in range(len(winds)):
+            for k in range(num_times):
+                alpha_hbf_nlte[winds[i],:,k] =  ( 
+                    phot_crss_5[winds[i]] * ( cdf.n1[isteps[k],:,4,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,4,iel] * stim_term_2[winds[i],:,k] ) 
+                                                )
+            
+                jbf_hbf_nlte[winds[i],:,k] = ( 
+                     jcoeff[winds[i],:,k] * ( 
+                         phot_crss_5[winds[i]] * cdf.nstar[isteps[k],:,4,iel] * b_c[isteps[k],:] )
+                         * (cc_ang)/(wavels_ang[winds[i]])**2.0 
+                                              ) 
+
+
+
+        
+
+    out = {'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2, 'gff':gff, 'SourceBp':SourceBp,
+            'alpha_hff':alpha_hff, 'b_c':b_c, 'phot_crss_1':phot_crss_1, 
+            'alpha_hbf_nlte':alpha_hbf_nlte, 'jbf_hbf_nlte':jbf_hbf_nlte}
 
     return out
 
