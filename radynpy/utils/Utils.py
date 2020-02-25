@@ -404,13 +404,13 @@ def transp_scat(tau=[],x=[],sc=[],scat=[],
     pms=np.zeros([nwave,ndep,ntimes],dtype=float)
     tauq=np.zeros([nwave,ndep,ntimes],dtype=float)
     dtauq=np.zeros([nwave,ndep,ntimes],dtype=float)
-    jnu=np.zeros([nwave,ndep,num_times],dtype=float)
+    jnu=np.zeros([nwave,ndep,ntimes],dtype=float)
 
     #
     # k=1: upper boundary
     #
     cmu=0.5/xmu[0]
-    for k in range(num_times):
+    for k in range(ntimes):
         for i in range(nwave):
             dtauq[i,1,k]=((x[i,0,k]+x[i,1,k])*(tau[k,1]-tau[k,0]))*cmu
             a1[i,0,k]=1./dtauq[i,1,k]

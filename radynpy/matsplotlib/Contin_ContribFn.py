@@ -544,8 +544,8 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
         for i in range(num_waves):
             BP_nu[i,:,:] = SourceBp[i,:,:] / cc_ang * wavels_ang[i]**2.0
         jnu = transp_scat(tau_standard, x_ratio, (epsilon * BP_nu), 1.-epsilon)
-        jnu.shape
-    #     jlam = jnu * cc_ang / wavel_ang^2. ; average intensity J_lambda
+        print(jnu.shape)
+        #jlam = jnu * cc_ang / wavels_ang**2. # average intensity J_lambda
 
     #     j_tot = j_tot + jlam *  (scatne + scatrh + scatrh2) ;+ (1.5e6 - 1.3e5) * scatrh2 ; last term is to emulate NUV radiation from above
 
