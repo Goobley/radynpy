@@ -313,3 +313,209 @@ def prfhbf_rad(wvls = [], Z = 1, n=6, *args):
 
      
     return prfhbf
+
+def hminus_pops(tg1, ne1, nh, bhmin=1.0, *args):
+
+    '''
+    A function to return the H minus populations
+
+    Parameters
+    __________
+
+    tg1 : float
+          the temperature stratification 
+    nh  : float
+          the population densities of hydrogen 
+    bhmin : float, optional
+            the departure coefficient from LTE
+            for H minus (default = 0).
+
+    Make sure the tg, and nh have dimensions of 
+    [timesteps, height], and [timesteps, height, level]
+
+   
+
+    The density of H minus from  
+    Vernazza et al. 1976, ApJS 30
+
+    Graham Kerr, Feb 19th 2020
+
+    '''
+    ndep = (tg1.shape)[1]
+    num_times = (tg1.shape)[0]
+    num_levs = (nh.shape)[2]
+
+    nhmin = np.zeros([ndep,num_times],dtype=float)
+    totnhi = np.sum(nh[:,:,0:num_levs-1],axis = 2) # Density of neutral hydrogen
+
+    for k in range(num_times):
+        nhmin[:,k] = (
+                1.0354e-16 * bhmin * ne1[k,:] * totnhi[k,:] * 
+                 tg1[k,:]**(-1.5) * np.exp(8762e0/tg1[k,:])
+                     )
+
+    return nhmin
+
+def transp_scat(tau=[],x=[],sc=[],scat=[],
+                *args):
+
+    '''
+    A function to return the average intensity J at some
+    wavelength  
+
+    Parameters
+    __________
+    
+    tau : float 
+          the optical depth at some standard wavelength 
+          (usually 5000A)
+    x : float
+        the ratio of total opacity to the opacity at some
+        standard wavelength
+    sc : float
+         epsilon B
+    scat: float
+         1 - epsilon 
+
+    
+
+    Graham Kerr, Feb 20th 2020
+
+    '''
+    ntimes = (tau.shape)[0]
+    ndep = (tau.shape)[1]
+    nwave = (x.shape)[0]
+
+
+    nmu=3
+    wmu=np.array([0.277778,0.444444,0.277778], dtype=float)
+    xmu=np.array([0.112702,0.500000,0.887298], dtype=float)
+
+    itran=0
+
+    sp1=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
+    sp2=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
+    sp3=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
+    a1=np.zeros([nwave,ndep,ntimes],dtype=float)
+    c1=np.zeros([nwave,ndep,ntimes],dtype=float)
+    p=np.zeros([nmu,nwave,ndep,ntimes],dtype=float)
+    iplus=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
+    iminus=np.zeros([nwave,ndep,ntimes],dtype=float)
+    pms=np.zeros([nwave,ndep,ntimes],dtype=float)
+    tauq=np.zeros([nwave,ndep,ntimes],dtype=float)
+    dtauq=np.zeros([nwave,ndep,ntimes],dtype=float)
+    jnu=np.zeros([num_waves,ndep,num_times],dtype=float)
+
+    #
+    # k=1: upper boundary
+    #
+    cmu=0.5/xmu[0]
+    for k in range(num_times):
+        for i in range(num_waves):
+            dtauq[i,1,k]=((x[i,0,k]+x[i,1,k])*(tau[k,1]-tau[k,0]))*cmu
+            a1[i,0,k]=1./dtauq[i,1,k]
+            t = tau[k,0]*x[i,0,k]*2.0*cmu
+            tauq[i,0,k]=t
+            dtauq[i,0,k]=t
+
+            #
+            # calculate dtauq
+            #
+            dtauq[i,1:ndep-1,k]=(x[i,1:ndep-1,k]+x[i,0:ndep-2,k])*(tau[k,1:ndep-1]-tau[k,0:ndep-2])*cmu
+         
+            #  
+            # calculate tauq
+            #
+            for j in range(ndep): 
+                tauq[i,j,k]=tauq[i,k-1,k]+dtauq[i,j,k]
+
+            #
+            #  calculate a1 and c1
+            #
+            a1[i,1:ndep-2,k] = 2./(dtauq[i,1:ndep-2,k]+dtauq[i,2:ndep-1,k])/dtauq[i,1:ndep-2,k]
+            c1[i,1:ndep-2,k] = 2./(dtauq[i,1:ndep-2,k]+dtauq[i,2:ndep-1,k])/dtauq[i,2:ndep-1,k]
+
+            #  call formal solver
+            #
+            #  calculate tridiagonal coefficients
+            #
+            for mu in range(nmu):
+                xmu1=xmu[mu]/xmu[0]
+                xmu2=xmu1*xmu1
+
+                #
+                # k=1: upper boundary
+                #
+                t=tauq[i,0,k]/xmu1
+                if (t < 0.01):
+                    ex1=t*(1.-t*(0.5-t*(0.1666667-t*0.041666667)))
+                elif(t < 20.):
+                    ex1=1.-np.exp(-t) 
+                else:
+                    ex1=1.
+  
+                ex = 1.-ex1
+                sp1[mu,mu,i,0,k] = 0.
+                sp2[mu,mu,i,0,k] = 1.0+2.0*xmu1*a1[i,0,k]
+                sp3[mu,mu,i,0,k] = -2.0*xmu2*a1[i,0,k]*a1[i,0,k]
+                fact = 1.0+2.0*xmu1*a1[i,0,k]*ex1
+                sp2[mu,mu,i,0,k] = sp2[mu,mu,i,0,k]/fact
+                sp3[mu,mu,i,0,k] = sp3[mu,mu,i,0,k]/fact
+                p[mu,i,0,k]=sc[i,0,k]
+
+                #
+                # interior
+                #
+                sp1[mu,mu,i,1:ndep-2,k]=-xmu2*a1[i,1:ndep-2,k]
+                sp2[mu,mu,i,1:ndep-2,k]=1.0
+                sp3[mu,mu,i,1:ndep-2,k]=-xmu2*c1[i,1:ndep-2,k]
+                p[mu,i,1:ndep-2,k]=sc[i,1:ndep-2,k]
+
+                #
+                # k=ndep: lower boundary
+                #
+                sp1[mu,mu,i,ndep-1,k]=-1.0                        
+                sp2[mu,mu,i,ndep-1,k]=dtauq[i,ndep-1,k]/xmu1+0.5*dtauq[i,ndep-1,k]**2/xmu2
+                sp3[mu,mu,i,ndep-1,k]=0.0
+                sk=(dtauq[i,ndep-1,k]/xmu1+0.5*dtauq[i,ndep-1,k]**2/xmu2)+1.0
+                p[mu,i,ndep-1,k]=sc[i,ndep-1,k]*sk - sc[i,ndep-2,k]
+
+                # 
+                # non-diagonal elements
+                #
+                for mu2 in range(nmu): 
+                    sp2[mu,mu2,i,0,k] = sp2[mu,mu2,i,0,k]-scat[i,0,k]*wmu[mu2]
+                    sp2[mu,mu2,i,1:ndep-2,k] = sp2[mu,mu2,i,1:ndep-2,k]-scat[i,1:ndep-2,k]*wmu[mu2]
+                    sp2[mu,mu2,i,ndep-1,k] = ( sp2[mu,mu2,i,ndep-1,k]-scat[i,ndep-1,k]*wmu[mu2]*sk + 
+                                               scat[i,ndep-2,k]*wmu[mu2])
+                    sp1[mu,mu2,i,ndep-1,k]= sp1[mu,mu2,i,ndep-1,k]+scat[i,ndep-2,k]*wmu[mu2]
+
+            #
+            # eliminate subdiagonal
+            #
+            for j in range(0,ndep-1): 
+                sp1p = sp1[:,:,i,j+1,k]
+                sp2k = sp2[:,:,i,j,k]
+                sp3k = sp3[:,:,i,j,k]
+                f = -sp1p#invert(sp2k-sp3k)
+                p[:,i,j+1,k] = p[:,i,j+1,k]+np.matmul(f,(p[:,i,j,k]))
+                sp2[:,:,i,j+1,k] = sp2[:,:,i,j+1,k]+np.matmul(f,sp2k)
+                sp2[:,:,i,j,k] = sp2[:,:,i,j,k] - sp3[:,:,i,j,k]
+
+            sp2[:,:,i,ndep-1,k]=sp2[:,:,i,ndep-1,k]-sp3[:,:,i,ndep-1,k]
+
+            #
+            # backsubstitute
+            #
+            p[:,i,ndep-1,k] = np.matmul(np.linalg.inv(sp2[:,:,i,ndep-1,k]),p[:,i,ndep-1,k])
+            for j in range(ndep-2, -1, -1):
+                p[:,i,j,k]= np.matmul( 
+                                   np.linalg.inv(sp2[:,:,i,j,k]), np.matmul(p[:,i,j,k]-sp3[:,:,i,j,k],p[:,i,j+1,k]) )
+
+
+            
+            for mu in range(nmu):
+                jnu[i,:,k] = jnu[i,:,k] + wmu[mu]*p[mu,i,:,k]\
+
+
+    return jnu
