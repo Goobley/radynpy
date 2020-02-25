@@ -515,7 +515,7 @@ def transp_scat(tau=[],x=[],sc=[],scat=[],
 
             
             for mu in range(nmu):
-                jnu[i,:,k] = jnu[i,:,k] + wmu[mu]*p[mu,i,:,k]\
+                jnu[i,:,k] = jnu[i,:,k] + wmu[mu]*p[mu,i,:,k]
 
 
     return jnu
