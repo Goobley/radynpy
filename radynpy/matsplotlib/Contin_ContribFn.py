@@ -83,6 +83,8 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     # Sort the wavelength array to be in ascending order
     wavels_ang = np.sort(wavels_ang)
 
+    tsteps = cdf['timet'][isteps]
+
     # Size of arrays
     num_times = len(isteps)
     num_waves = len(wavels_ang)
@@ -163,7 +165,7 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     bhmin = 1e0
 
    ########################################################################
-   # COMPUTE THE OPACITIES AND EMISSIVITIES     ############          
+   # COMPUTE THE OPACITIES AND EMISSIVITIES            
    ########################################################################
    
    ####
@@ -551,30 +553,32 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
             for k in range(num_times):
                 jlam[i,:,k] = jnu[i,:,k] * cc_ang / wavels_ang[i]**2. # average intensity J_lambda
 
-    #     j_tot = j_tot + jlam *  (scatne + scatrh + scatrh2) ;+ (1.5e6 - 1.3e5) * scatrh2 ; last term is to emulate NUV radiation from above
+        j_tot = j_tot + jlam * (scatne + scatrh) 
 
-    #     ;print,jlam
-    #     geom_fact = 1. / (4d * !pi / (0.08 * 2.23))
-
-    #     if mean_int_extra gt 0 then  j_tot = j_tot + (mean_int_extra - 1.3e5) * scatrh2 *geom_fact
-    #     j_scat =  jlam *  (scatne + scatrh + scatrh2)
-    #     j_scat_h2 = jlam * scatrh2
-    #     j_thoms = jlam * scatne
-    #     if mean_int_extra gt 0 then j_thoms = j_thoms + (mean_int_extra - 1.3e5) * scatrh2 * geom_fact
-    #     if mean_int_extra gt 0 then j_scat = j_scat + (mean_int_extra - 1.3e5) * scatrh2 * geom_fact
-
-    # endif else begin
-
-    #   jlam = 0d
-
-    # endelse
     
+   ########################################################################
+   # COMPUTE THE CONTRIBUTION FNS            
+   ########################################################################
+ 
+    xx = alpha_tot
+    tauq = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    jq = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    tauq[:,0,:] = xx[:,0,:]*1e-9
+
+    # calculate the optical depth: tauq
+    # optical depth at interface depth k averages the opacity at k and
+    # the previous k (the average within the grid cell interfaced by k and k-1)
+    for j in range(1, ndep): 
+        for k in range(num_times):
+            tauq[:,j,k] = tauq[:,j-1,k]+0.5*(xx[:,j,k]+xx[:,j-1,k])*(cdf.z1[isteps[k],j]-cdf.z1[isteps[k],j-1])*(-1.0) 
+            jq[:,j,k] = jq[:,j-1,k]+0.5*(j_tot[:,j,k]+j_tot[:,j-1,k])
 
     out = {'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2, 'gff':gff, 'SourceBp':SourceBp,
             'alpha_hff':alpha_hff, 'b_c':b_c, 'phot_crss_1':phot_crss_1, 
             'alpha_hbf_nlte':alpha_hbf_nlte, 'jbf_hbf_nlte':jbf_hbf_nlte,
             'alpha_hbf_upper':alpha_hbf_upper, 'nhmin':nhmin, 'alpha_hmbf':alpha_hmbf,
-            'alpha_hmff':alpha_hmff, 'scatrh':scatrh, 'scatne':scatne, 'alpha_tot':alpha_tot}
+            'alpha_hmff':alpha_hmff, 'scatrh':scatrh, 'scatne':scatne, 'alpha_tot':alpha_tot, 
+            'j_tot':j_tot, 'wavels_ang':wavels_ang, 'isteps':isteps, 'tsteps':tsteps}
 
     return out
 
