@@ -1,5 +1,5 @@
 import numpy as np
-from radynpy.utils import gaunt_bf, planck_fn, prfhbf_rad, gaunt_factor, hminus_pops
+from radynpy.utils import gaunt_bf, planck_fn, prfhbf_rad, gaunt_factor, hminus_pops, transp_scat
 
 
 def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
