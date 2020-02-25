@@ -83,7 +83,7 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     # Sort the wavelength array to be in ascending order
     wavels_ang = np.sort(wavels_ang)
 
-    tsteps = cdf['timet'][isteps]
+    tsteps = cdf.time[isteps]
 
     # Size of arrays
     num_times = len(isteps)
@@ -573,6 +573,20 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
             tauq[:,j,k] = tauq[:,j-1,k]+0.5*(xx[:,j,k]+xx[:,j-1,k])*(cdf.z1[isteps[k],j]-cdf.z1[isteps[k],j-1])*(-1.0) 
             jq[:,j,k] = jq[:,j-1,k]+0.5*(j_tot[:,j,k]+j_tot[:,j-1,k])
 
+
+    # z (and z_ci) is not the same as z1t; the ndep-th value of z is 
+    # the average of the (ndep-1)-th and ndep-th value of z1t
+    z = (cdf.z1[isteps,0:cdf.ndep-2]+cdf.z1[isteps,1:cdf.ndep-1])*0.5
+    z=[2*z(0)-z(1),z] ; extrapolate at top of loop
+    z_ci = z ; # z_ci now ndep elements big, with the first element between the average of the 0th value of z1t and some extrapolated
+;  value higher up.
+;dzt_ci=(z[0:ndep-2]-z[1:ndep-1])
+;   dzt_ci = dzt[*,istep]
+  dzt_ci=fltarr(ndep)
+  dzt_ci=(z[0:ndep-2]-z[1:ndep-1])
+; # now jtot and alpha are calculated at the interface depths, and z_ci which
+; is at grid centers, and dzt_ci, is centered on the interface points
+; (jtot, alpha) except 
     out = {'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2, 'gff':gff, 'SourceBp':SourceBp,
             'alpha_hff':alpha_hff, 'b_c':b_c, 'phot_crss_1':phot_crss_1, 
             'alpha_hbf_nlte':alpha_hbf_nlte, 'jbf_hbf_nlte':jbf_hbf_nlte,
