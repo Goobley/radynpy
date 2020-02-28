@@ -399,46 +399,32 @@ def transp_scat(tau=[],x=[],sc=[],scat=[],
     a1=np.zeros([nwave,ndep,ntimes],dtype=float)
     c1=np.zeros([nwave,ndep,ntimes],dtype=float)
     p=np.zeros([nmu,nwave,ndep,ntimes],dtype=float)
-    iplus=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
-    iminus=np.zeros([nwave,ndep,ntimes],dtype=float)
     pms=np.zeros([nwave,ndep,ntimes],dtype=float)
     tauq=np.zeros([nwave,ndep,ntimes],dtype=float)
     dtauq=np.zeros([nwave,ndep,ntimes],dtype=float)
     jnu=np.zeros([nwave,ndep,ntimes],dtype=float)
 
-    #
-    # k=1: upper boundary
-    #
+
     cmu=0.5/xmu[0]
     for k in range(ntimes):
         for i in range(nwave):
+            #
+            # j=1: upper boundary
+            #
             dtauq[i,1,k]=((x[i,0,k]+x[i,1,k])*(tau[k,1]-tau[k,0]))*cmu
             a1[i,0,k]=1./dtauq[i,1,k]
             t = tau[k,0]*x[i,0,k]*2.0*cmu
             tauq[i,0,k]=t
             dtauq[i,0,k]=t
-
-            #
-            # calculate dtauq
-            #
-            dtauq[i,1:ndep-1,k]=(x[i,1:ndep-1,k]+x[i,0:ndep-2,k])*(tau[k,1:ndep-1]-tau[k,0:ndep-2])*cmu
-         
-            #  
-            # calculate tauq
-            #
-            for j in range(ndep): 
-                tauq[i,j,k]=tauq[i,k-1,k]+dtauq[i,j,k]
-
+            dtauq[i,1:ndep,k]=(x[i,1:ndep,k]+x[i,0:ndep-1,k])*(tau[k,1:ndep]-tau[k,0:ndep-1])*cmu
+            for j in range(1,ndep): 
+                tauq[i,j,k]=tauq[i,j-1,k]+dtauq[i,j,k]
             #
             #  calculate a1 and c1
             #
-            a1[i,1:ndep-2,k] = 2./(dtauq[i,1:ndep-2,k]+dtauq[i,2:ndep-1,k])/dtauq[i,1:ndep-2,k]
-            c1[i,1:ndep-2,k] = 2./(dtauq[i,1:ndep-2,k]+dtauq[i,2:ndep-1,k])/dtauq[i,2:ndep-1,k]
+            a1[i,1:ndep-1,k] = 2./(dtauq[i,1:ndep-1,k]+dtauq[i,2:ndep,k])/dtauq[i,1:ndep-1,k]
+            c1[i,1:ndep-1,k] = 2./(dtauq[i,1:ndep-1,k]+dtauq[i,2:ndep,k])/dtauq[i,2:ndep,k]
 
-            #  call formal solver
-            #
-            #  calculate tridiagonal coefficients
-            #
             for mu in range(nmu):
                 xmu1=xmu[mu]/xmu[0]
                 xmu2=xmu1*xmu1
@@ -453,7 +439,7 @@ def transp_scat(tau=[],x=[],sc=[],scat=[],
                     ex1=1.-np.exp(-t) 
                 else:
                     ex1=1.
-  
+                    
                 ex = 1.-ex1
                 sp1[mu,mu,i,0,k] = 0.
                 sp2[mu,mu,i,0,k] = 1.0+2.0*xmu1*a1[i,0,k]
@@ -462,19 +448,19 @@ def transp_scat(tau=[],x=[],sc=[],scat=[],
                 sp2[mu,mu,i,0,k] = sp2[mu,mu,i,0,k]/fact
                 sp3[mu,mu,i,0,k] = sp3[mu,mu,i,0,k]/fact
                 p[mu,i,0,k]=sc[i,0,k]
-
+                
                 #
                 # interior
                 #
-                sp1[mu,mu,i,1:ndep-2,k]=-xmu2*a1[i,1:ndep-2,k]
-                sp2[mu,mu,i,1:ndep-2,k]=1.0
-                sp3[mu,mu,i,1:ndep-2,k]=-xmu2*c1[i,1:ndep-2,k]
-                p[mu,i,1:ndep-2,k]=sc[i,1:ndep-2,k]
-
+                sp1[mu,mu,i,1:ndep-1,k]=-xmu2*a1[i,1:ndep-1,k]
+                sp2[mu,mu,i,1:ndep-1,k]=1.0
+                sp3[mu,mu,i,1:ndep-1,k]=-xmu2*c1[i,1:ndep-1,k]
+                p[mu,i,1:ndep-1,k]=sc[i,1:ndep-1,k]
+                
                 #
                 # k=ndep: lower boundary
                 #
-                sp1[mu,mu,i,ndep-1,k]=-1.0                        
+                sp1[mu,mu,i,ndep-1,k]= -1.0                        
                 sp2[mu,mu,i,ndep-1,k]=dtauq[i,ndep-1,k]/xmu1+0.5*dtauq[i,ndep-1,k]**2/xmu2
                 sp3[mu,mu,i,ndep-1,k]=0.0
                 sk=(dtauq[i,ndep-1,k]/xmu1+0.5*dtauq[i,ndep-1,k]**2/xmu2)+1.0
@@ -485,19 +471,20 @@ def transp_scat(tau=[],x=[],sc=[],scat=[],
                 #
                 for mu2 in range(nmu): 
                     sp2[mu,mu2,i,0,k] = sp2[mu,mu2,i,0,k]-scat[i,0,k]*wmu[mu2]
-                    sp2[mu,mu2,i,1:ndep-2,k] = sp2[mu,mu2,i,1:ndep-2,k]-scat[i,1:ndep-2,k]*wmu[mu2]
+                    sp2[mu,mu2,i,1:ndep-1,k] = sp2[mu,mu2,i,1:ndep-1,k]-scat[i,1:ndep-1,k]*wmu[mu2]
                     sp2[mu,mu2,i,ndep-1,k] = ( sp2[mu,mu2,i,ndep-1,k]-scat[i,ndep-1,k]*wmu[mu2]*sk + 
                                                scat[i,ndep-2,k]*wmu[mu2])
                     sp1[mu,mu2,i,ndep-1,k]= sp1[mu,mu2,i,ndep-1,k]+scat[i,ndep-2,k]*wmu[mu2]
-
-            #
+                    
+                #
             # eliminate subdiagonal
             #
             for j in range(0,ndep-1): 
                 sp1p = sp1[:,:,i,j+1,k]
                 sp2k = sp2[:,:,i,j,k]
                 sp3k = sp3[:,:,i,j,k]
-                f = -sp1p#invert(sp2k-sp3k)
+                f = -np.matmul(sp1p,np.linalg.inv(sp2k-sp3k))
+                #f = -sp1p
                 p[:,i,j+1,k] = p[:,i,j+1,k]+np.matmul(f,(p[:,i,j,k]))
                 sp2[:,:,i,j+1,k] = sp2[:,:,i,j+1,k]+np.matmul(f,sp2k)
                 sp2[:,:,i,j,k] = sp2[:,:,i,j,k] - sp3[:,:,i,j,k]
@@ -507,15 +494,191 @@ def transp_scat(tau=[],x=[],sc=[],scat=[],
             #
             # backsubstitute
             #
-            p[:,i,ndep-1,k] = np.matmul(np.linalg.inv(sp2[:,:,i,ndep-1,k]),p[:,i,ndep-1,k])
+            p[:,i,ndep-1,k] = np.matmul( np.linalg.inv(sp2[:,:,i,ndep-1,k])  ,p[:,i,ndep-1,k])
+
+
             for j in range(ndep-2, -1, -1):
-                p[:,i,j,k]= np.matmul( 
-                                   np.linalg.inv(sp2[:,:,i,j,k]), np.matmul(p[:,i,j,k]-sp3[:,:,i,j,k],p[:,i,j+1,k]) )
+                tmp = np.linalg.inv(sp2[:,:,i,j,k])
+                tmp2 = np.matmul(sp3[:,:,i,j,k],p[:,i,j+1,k])
+                tmp3 = p[:,i,j,k] - tmp2
+                p[:,i,j,k]= np.matmul( tmp, tmp3 )
 
 
-            
             for mu in range(nmu):
-                jnu[i,:,k] = jnu[i,:,k] + wmu[mu]*p[mu,i,:,k]
+                 jnu[i,:,k] = jnu[i,:,k] + wmu[mu]*p[mu,i,:,k]
 
 
     return jnu
+
+
+def wnstark2(n=[],ne=[],n1=[],tg=[],
+                *args):
+
+    '''
+    The occupational probability. 
+    That is, the probability of an atom being perturbed by a net electric
+    microfield that is below the critical field strength that would 
+    dissolve/destroy level n. Used for Landau-Zener effects 
+    (see Kowalski et al 2015)
+
+    Parameters
+    __________
+    
+    n : float 
+        pseudo quantum number
+    ne : float
+         the electron density in height
+    n1 : float
+         the ground state H density in height
+    tg: float
+         the gas temperature in height
+
+    Graham Kerr, Feb 27th 2020
+
+    '''
+    
+    Zjk = 1.0e0 
+    Zr = 1.0e0 
+    el = 4.803e-10
+
+    a0 = 5.2981e-9
+    F0 = 1.25e-9 * Zjk * ne**(2./3.)
+
+    betacrit = (2.0e0 * n + 1.0e0) / (6.0e0 * n**4.0 * (n+1.0e0)**2) * el / (a0**2.0 * F0)
+
+    if n < 3: 
+        Kn = 1.0e0
+    else:
+        Kn = 16.0e0/3.0e0 * n / (n+1.0e0)**2.0
+
+    P1 = 0.1402e0
+    P2 = 0.1285e0
+    P3 = 1e0
+    P4 = 3.15e0
+    P5 = 4.0e0
+
+    a = 0.09e0 * (ne**(1.0e0/6.0e0)) / tg**0.5e0
+
+    X = (1.0e0 + P3*a)**P4
+    C1 = P1*(X + P5*Zr*a**3)
+    C2 = P2*X
+
+    lilf = C1 * betacrit**3 / (1.0e0 + C2 * betacrit**(1.5e0))
+
+    Q = lilf / (1.0e0+lilf)
+
+    wn_neutral = np.exp(-1.0e0 * 4.0e0 * np.pi/3.0e0 * n1 * (n**2.0e0*a0+a0)**3.0e0)
+
+    return wn_neutral*Q
+
+
+
+def poph2(cdf,*args):
+
+    '''
+    The population of H2 molecules from LTE dissociation 
+    equilibrium
+
+    Parameters
+    __________
+    
+    cdf :  
+         radynpy cdf output
+   
+    Graham Kerr, Feb 27th 2020
+
+    **** Could probably re-write to only input certain 
+         variables but for now they are all passed via
+         the cdf file
+
+    '''
+    grph = 2.2690989266985202e-24
+    nt = (cdf.time.shape)[0]
+    nh21t = np.zeros([nt, cdf.ndep])
+
+    for k in range(nt):
+        for j in range(cdf.ndep):
+
+            xkh2k,dxkh2k,eh2k,deh2k  = molfys(cdf.tg1[k,j])
+            a1 = 8.e0*cdf.d1[k,j]/grph/xkh2k
+           
+            if (a1 > 1.e-03): 
+                nh21t[k,j]=(4.e0*cdf.d1[k,j]/grph+xkh2k-xkh2k*np.sqrt(1.e0+a1))/8.e0
+            else:
+                a2=(cdf.d1[k,j]/grph)**2/xkh2k
+                a3=(cdf.d1[k,j]/grph)**3*4.e0/xkh2k/xkh2k
+                nh21t[k,j]=a2-a3
+
+    return nh21t
+
+
+
+
+
+def molfys(tg,*args):
+
+    '''
+    Gives the dissociation constant xkh2 (=n(h i)*n(h i)/n(h2) )
+    expressed in number per cm3, and the sum of dissociation, 
+    rotation and vibration energies, deh2 for h2 (expressed in 
+    ergs per molecule).
+    The data are from vardya, m.n.r.a.s. 129, 205 (1965) and earlier
+    references. the dissociation constant for h2 is from tsuji,
+    astron. astrophys. 1973.
+    The logarithmic temperature derivatives are also returned in
+    dxkh2 and deh2
+
+    Parameters
+    __________
+    
+    tg : float
+         the gas temperature
+   
+    Graham Kerr, Feb 27th 2020
+
+    '''
+    a1 = np.array([12.739e0,-5.1172e0,1.2572e-1,-1.4149e-2,6.3021e-4])
+    b1 = np.array([2.6757e0,-1.4772e0,0.60602e0,-0.12427e0,0.009750e0])
+    bk=1.380662e-16
+    ee=1.6021890e-12
+
+    te = np.zeros([5],dtype=float)
+    tes = np.zeros([7],dtype=float)
+    tex=5040.e0/tg
+    te[0]=1.e0
+    for k in range(1,5):
+        te[k]=te[k-1]*tex   
+    tes[2:7] = te
+    tes[1] = 1.e0/tex
+    tes[0] = te[1]/tex
+
+    # dissociation constant for h2
+    xkh2=0.e0
+    for k in range(5):
+        xkh2=a1[k]*te[k]+xkh2 
+    xkh2=10.e0**xkh2
+    xkh2=xkh2/bk/tg
+
+    # logarithmic temperature derivative of dissociation constant for h2
+    dxkh2=0.e0
+    for k in range(1,5):
+        dxkh2=k*a1[k]*te[k-1]+dxkh2 
+    dxkh2=-dxkh2*np.log(10.e0)*xkh2*tex
+    dxkh2=dxkh2-xkh2
+
+    # internal energy per molecule
+    eh2=0.e0
+    for k in range(5):
+        eh2=b1[k]*tes[2+k-1]+eh2
+    eh2=eh2*8.617e-5*5040.e0-4.476e0
+    eh2=eh2*ee
+
+    # logarithmic temperature derivative of internal energy
+
+    deh2=0.e0
+    for k in range(5): 
+        deh2=np.float(k-1)*b1[k]*tes[2+k-2]+deh2
+    deh2=-deh2*8.617e-5*5040.e0*tex
+    deh2=deh2*ee
+
+    return xkh2,dxkh2,eh2,deh2

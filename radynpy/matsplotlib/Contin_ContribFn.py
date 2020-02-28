@@ -1,10 +1,14 @@
 import numpy as np
-from radynpy.utils import gaunt_bf, planck_fn, prfhbf_rad, gaunt_factor, hminus_pops, transp_scat
+from radynpy.utils import gaunt_bf, planck_fn, prfhbf_rad, gaunt_factor, hminus_pops, transp_scat, wnstark2, poph2
+from radynpy import matsplotlib as rd
 
 
 def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
+                      wstandard = 5000.00,
                       include_metals = True, include_helium = True, 
-                      include_scatt = True, wstandard = 5000.00):
+                      include_scatt = True, include_h2 = False, 
+                      include_lz = False, basic_out = False, 
+                      full_out =  False):
 
     '''
     Calculates the contribution function to continuum at wavelengths = wavel_ang.
@@ -25,25 +29,40 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
               the atmosphere. (default: -1).
         include_metals: bool, optional
               Set to include background LTE opacities from metal continuum (defaul = True).
+              If doing this then you can only analyse a wavelength that is used by RADYN 
+              to compute the background opacity (within .5A)... though really you should
+              restrict yourself to that anyway.
         include_helium : bool, optional
-               Set to include the NUV b-f continua for  helium using the NLTE population 
+               Set to include the NUV b-f continua for helium using the NLTE population 
                densities of helium (default = True).
-        scatt : bool, optional
-               Set to include scattering terms in the emissivity (default = True).
+               Also adds LTE opacities for higher levels of Helium II, which
+               have edges at 3647, 5698, and 8205. Just used prhbf with zz=2.0. 
+        include_scatt : bool, optional
+               Set to include scattering terms in the opacity and emissivity 
+               (default = True).
+        include_h2 : bool, optioinal
+               Calculates H2 population in LTE (as is done in RADYN)
+               and then adds Rayleigh scattering of H2, important mainly for M dwarf 
+               atmospheres (default = False). 
+        include_lz : bool, optional
+                Calculation Landau-Zener opacity and emissivity
+                longward of the Balmer jump (default = False).
+                **** Consult Adam Kowalski about this part! ****
         wstandard : float, optional
                The 'standard' wavelength for use with calculating the scattering emissivity
-               (defaul = 5000.00)
-        
+               (default = 5000.00 angstroms)
+        basic_out : bool, optional
+               Select to only output a portion of the typical code output (default = False)
+        full_out : bool, optional
+               Select to only output a comprehensive set of variables (default = False)
+       
     
-    Note that Adam's version includes some additional terms for Landau-Zener, Mg II wing intenstity
-    and H2 (I think mainly useful/necessary for M Dwarf atmos.). Will check with him if these should 
-    be included here, but they are presently 
-
-
-    This uses the routines in opacity.py, in radynpy.matsplotlib to read opcatb.dat 
-
-    **** I have not yet included some stuff from the IDL version - LZ, Mg II wings. That will 
-         done later
+    **** Note that Adam's version includes some additional terms for  Mg II wing intenstity
+         and irradiance for H2 scattering (I think mainly useful/necessary for M Dwarf atmos). 
+         Will check with him if these should be included here, but they are not presently. 
+    
+    **** Where opacity and emissivity are not computed at the same time, the emissivities 
+         are computed later in the routine using the Planck fn
 
     **** Requires subroutines mostly (all?) held in radynpy/utils.py
              - gaunt_factor
@@ -51,13 +70,21 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
              - gaunt_bf
              - planck_fn
              - hminus_pops
+             - transp_scat
+             - wnstark2
+             - poph2
+
 
     Graham Kerr, Feb 2020
+
+
+    ******** add in he II
+    ******** add in H2
 
     '''
 
     ########################################################################
-    # Some preliminary set up and constants
+    # Some preliminary set up, constants, and calculation of common terms
     ########################################################################
 
     if include_helium ==  True:
@@ -66,19 +93,24 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
        print('>>> Including Scattering') 
     if include_metals ==  True:
        print('>>> Including Metals') 
-
+    if include_h2 ==  True:
+       print('>>> Including Rayleigh scattering from H2') 
+    if include_lz ==  True:
+       print('>>> Including Landau-Zener')
+    if (basic_out == True) & (full_out == True): 
+       print('... You asked for both basic output and full output... FULL OUTPUT is provided')
+    
 
     # Turn the inputs into numpy arrays
     wavels_ang = np.array(wavels_ang)
 
     # Add 5000A to the wavelength list (if scattering is to be included) 
     # as the 'standard' opacity is required, if it is not there already 
-    if include_scatt == True:
-        wind = np.where(wavels_ang == wstandard)
-        if len(wind) == 0:
-            print('adding wstandard')
-            print(wstandard)
-            wavels_ang = np.append(wavels_ang,[wstandard])
+    #if include_scatt == True:
+    wind = np.where(wavels_ang == wstandard)
+    if np.array(wind).size == 0:
+        print('>>> Adding wstandard = '+str(wstandard)+' to wavelength list')
+        wavels_ang = np.append(wavels_ang,[wstandard])
 
     # Sort the wavelength array to be in ascending order
     wavels_ang = np.sort(wavels_ang)
@@ -89,16 +121,18 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     num_times = len(isteps)
     num_waves = len(wavels_ang)
 
+
     # The viewing angle
     mu = cdf.zmu[mu_ind]
     
     # Hydrogen is element index 0
     iel = 0
-
+    ielhe = 2
     # Arrays to hold various variables later, and reduce other variables
-    xconth = np.zeros(cdf.ndep, dtype = float) #  metal background opacity 
     totnhi = np.sum(cdf.n1[:,:,0:cdf.nk[iel]-1,iel],axis = 2) # Density of neutral hydrogen
+    toth = np.sum(cdf.n1[:,:,0:cdf.nk[iel],iel],axis = 2) # Density of total hydrogen
     nh = cdf.n1[:,:,0:cdf.nk[iel],iel] # The hydrogen population densities
+    nhe = cdf.n1[:,:,0:cdf.nk[ielhe],ielhe] # The hydrogen population densities
 
     # Some physical constants
     cc_ang = cdf.cc*1.0e8     # Speed of light in angstroms
@@ -117,8 +151,8 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
 
     # Free-free gaunt factor (from Gray pf 149)
     gff = np.zeros([num_waves,cdf.ndep,num_times], dtype=float)
-    for i in range(num_times):
-        gff[:,:,i] = [1.0 + 3.3512 * x**(-0.3333333) * (6.95e-9 * x * cdf.tg1[isteps[i],:] + 0.5) for x in wavels_ang]
+    for k in range(num_times):
+        gff[:,:,k] = [1.0 + 3.3512 * x**(-0.3333333) * (6.95e-9 * x * cdf.tg1[isteps[k],:] + 0.5) for x in wavels_ang]
 
 
 
@@ -133,14 +167,14 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     # nlte opacity (the negative term in alpha_hbf_nlte)
     stim_term = np.zeros([num_waves,cdf.ndep,num_times], dtype=float)
     stim_term_2 = np.zeros([num_waves,cdf.ndep,num_times], dtype=float)
-    for i in range(num_times):
-        stim_term[:,:,i] = [1e0 - np.exp( hc_k / (x * cdf.tg1[isteps[i],:]) *(-1e0) ) for x in wavels_ang]
-        stim_term_2[:,:,i] = [np.exp( hc_k / (x * cdf.tg1[isteps[i],:]) * (-1e0) ) for x in wavels_ang]
+    for k in range(num_times):
+        stim_term[:,:,k] = [1e0 - np.exp( hc_k / (x * cdf.tg1[isteps[k],:]) *(-1e0) ) for x in wavels_ang]
+        stim_term_2[:,:,k] = [np.exp( hc_k / (x * cdf.tg1[isteps[k],:]) * (-1e0) ) for x in wavels_ang]
 
     # The constant terms used in the calc of emissivity.
     jcoeff = np.zeros([len(nu),cdf.ndep,num_times], dtype=float)
-    for i in range(num_times):
-        jcoeff[:,:,i] = [2e0 * cdf.hh * x**3.0 / cdf.cc**2.0 * np.exp(-1.0 * cdf.hh * x / (cdf.bk * cdf.tg1[isteps[i],:])) for x in nu]
+    for k in range(num_times):
+        jcoeff[:,:,k] = [2e0 * cdf.hh * x**3.0 / cdf.cc**2.0 * np.exp(-1.0 * cdf.hh * x / (cdf.bk * cdf.tg1[isteps[k],:])) for x in nu]
 
 
     # Photoionisation cross-sections [Mihalis 1978, eq 4-114]
@@ -239,18 +273,34 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     if len(winds) != 0:
         for i in range(len(winds)):
             for k in range(num_times):
+
+                ### THIS IS IN PROGRESS
+                if include_lz == True:
+                     #  n = 3d
+                    nistar = 2e0
+                    lamxx = wavels_ang[winds[i]]
+                    nstar_wn = (1e0 / nistar**2 - 6.6260755e-27 * 2.9979e18/(lamxx * 13.598434005136e0 * 1.6021772e-12))**(-0.5)
+                    wn_total = wnstark2(nstar_wn,cdf.ne1[isteps[k],:],cdf.n1[isteps[k],:,0,0],cdf.tg1[isteps[k],:])                      
+                    DissFrac = 1e0 - wn_total/1e0
+                else:
+                    DissFrac = np.zeros([cdf.ndep],dtype=float)
+                #DissFrac = np.zeros([cdf.ndep],dtype=float)
+
                 alpha_hbf_nlte[winds[i],:,k] =  ( 
                     phot_crss_3[winds[i]] * ( cdf.n1[isteps[k],:,2,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,2,iel] * stim_term_2[winds[i],:,k] ) + 
                     phot_crss_4[winds[i]] * ( cdf.n1[isteps[k],:,3,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,3,iel] * stim_term_2[winds[i],:,k] ) + 
-                    phot_crss_5[winds[i]] * ( cdf.n1[isteps[k],:,4,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,4,iel] * stim_term_2[winds[i],:,k] ) 
+                    phot_crss_5[winds[i]] * ( cdf.n1[isteps[k],:,4,iel] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,4,iel] * stim_term_2[winds[i],:,k] ) +
+                    2.815e29/(2.**5) *  (cc_ang/wavels_ang[winds[i]])**(-3)  * gauntbf2[winds[i]]  * (cdf.n1[isteps[k],:,1,0] - b_c[isteps[k],:] * cdf.nstar[isteps[k],:,1,0] * stim_term_2[winds[i],:,k]) * DissFrac
                                                 )
             
                 jbf_hbf_nlte[winds[i],:,k] = ( 
                      jcoeff[winds[i],:,k] * ( 
                          phot_crss_3[winds[i]] * cdf.nstar[isteps[k],:,2,iel] * b_c[isteps[k],:] +
                          phot_crss_4[winds[i]] * cdf.nstar[isteps[k],:,3,iel] * b_c[isteps[k],:] +
-                         phot_crss_5[winds[i]] * cdf.nstar[isteps[k],:,4,iel] * b_c[isteps[k],:] )
+                         phot_crss_5[winds[i]] * cdf.nstar[isteps[k],:,4,iel] * b_c[isteps[k],:] +
+                         2.815e29/(2.**5)*(cc_ang/wavels_ang[winds[i]])**(-3.) * cdf.nstar[isteps[k],:,1,0] * gauntbf2[winds[i]] * b_c[isteps[k],:] * DissFrac)
                          * (cc_ang)/(wavels_ang[winds[i]])**2.0 
+                    
                                               )         
     # Brackett continuum
     winds = (np.where((wavels_ang <= 14580.1) & (wavels_ang > 8205.71 )))[0]
@@ -291,8 +341,6 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     # Calculates the H f-b opacity from levels higher than those 
     # treated in detail in RADYN. Based on the internal routines
     # used by RADYN
-
-
     alpha_hbf_upper = np.zeros([num_waves, cdf.ndep, num_times], dtype = float)      
     upplevs = np.array([6,7,8])
     for n in range(len(upplevs)): #Fortran numbering, so include levels n = 5, 6, 7
@@ -314,12 +362,10 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
                           alpha_hbf_upper[i,:,k] + crhbf[i] * pop * (1.0 - stim_term_2[i,:,k])
                                                  )
            
-         
 
    ####
    # H minus bound-free
    ####
-
     # Computes the H- bf opacity.
     # The values absorption b-f coefficients for H- were obtained from 
     # Geltman 1962, Aph 136
@@ -356,9 +402,8 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
 
 
    ####
-   # H- free-free 
+   # H minus free-free 
    ####
-
     # Calculate the free-free contribution from H-
     # Expressions from gray p. 149-150. Note misprint of first
     # term of f0 in gray 
@@ -409,7 +454,6 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
    ####
    # Scattering Terms
    ####
-
     # Rayleigh scattering opacity
     w2 = 1./(wavels_ang * wavels_ang)
     w4 = w2*w2
@@ -427,8 +471,7 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
    ####
    # Helium
    ####
-
-    # Include Helium recombination edges
+    # Include Helium recombination edges in NLTE
     alpha_hebf65 = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
     jbf_hebf65 = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
     alpha_hebf64 = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
@@ -437,22 +480,23 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
     jbf_hebf63 = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
     alpha_hebf62 = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
     jbf_hebf62 = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    alpha_heiibf_upper = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
     if (include_helium == True):
         ielhe = 2
         winds = (np.where((wavels_ang < 3664.41e0)))[0]
         if len(winds) != 0:  
             for i in range(len(winds)):
                 for k in range(num_times):
-                    alpha_hebf64[winds[i],:,k] =  (
+                    alpha_hebf65[winds[i],:,k] =  (
                                     1.38e-17 * (cc_ang/3664.41e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 * 
-                                    (cdf.n1[isteps[i],:,4,ielhe] - b_c_he[isteps[i],:] * 
-                                        cdf.nstar[isteps[i],:,4,ielhe] * stim_term_2[winds[i],:,k])
+                                    (cdf.n1[isteps[k],:,4,ielhe] - b_c_he[isteps[k],:] * 
+                                        cdf.nstar[isteps[k],:,4,ielhe] * stim_term_2[winds[i],:,k])
                                                   ) 
-                    jbf_hebf64[winds[i],:,k] = (
+                    jbf_hebf65[winds[i],:,k] = (
                                     jcoeff[winds[i],:,k] * 1.38e-17 * (cc_ang/3664.41e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 *  
-                                    b_c_he[isteps[i],:] * cdf.nstar[isteps[i],:,4,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
+                                    b_c_he[isteps[k],:] * cdf.nstar[isteps[k],:,4,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
                                                )
         winds = (np.where((wavels_ang < 3408.60e0)))[0]
         if len(winds) != 0:  
@@ -461,13 +505,13 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
                     alpha_hebf64[winds[i],:,k] =  (
                                     1.38e-17 * (cc_ang/3408.60e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 * 
-                                    (cdf.n1[isteps[i],:,3,ielhe] - b_c_he[isteps[i],:] * 
-                                        cdf.nstar[isteps[i],:,3,ielhe] * stim_term_2[winds[i],:,k])
+                                    (cdf.n1[isteps[k],:,3,ielhe] - b_c_he[isteps[k],:] * 
+                                        cdf.nstar[isteps[k],:,3,ielhe] * stim_term_2[winds[i],:,k])
                                                   ) 
                     jbf_hebf64[winds[i],:,k] = (
                                     jcoeff[winds[i],:,k] * 1.63e-17 * (cc_ang/3408.60e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 *  
-                                    b_c_he[isteps[i],:] * cdf.nstar[isteps[i],:,3,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
+                                    b_c_he[isteps[k],:] * cdf.nstar[isteps[k],:,3,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
                                                )
         winds = (np.where((wavels_ang < 3110.70e0)))[0]
         if len(winds) != 0:  
@@ -476,13 +520,13 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
                     alpha_hebf63[winds[i],:,k] =  (
                                     9.24e-18 * (cc_ang/3110.70e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 * 
-                                    (cdf.n1[isteps[i],:,2,ielhe] - b_c_he[isteps[i],:] * 
-                                        cdf.nstar[isteps[i],:,2,ielhe] * stim_term_2[winds[i],:,k])
+                                    (cdf.n1[isteps[k],:,2,ielhe] - b_c_he[isteps[k],:] * 
+                                        cdf.nstar[isteps[k],:,2,ielhe] * stim_term_2[winds[i],:,k])
                                                   ) 
                     jbf_hebf63[winds[i],:,k] = (
                                     jcoeff[winds[i],:,k] * 9.24e-18 * (cc_ang/3110.70e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 *  
-                                    b_c_he[isteps[i],:] * cdf.nstar[isteps[i],:,2,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
+                                    b_c_he[isteps[k],:] * cdf.nstar[isteps[k],:,2,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
                                                )
         winds = (np.where((wavels_ang < 2592.80)))[0]
         if len(winds) != 0:  
@@ -491,43 +535,168 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
                     alpha_hebf62[winds[i],:,k] =  (
                                     5.50e-18 * (cc_ang/2592.80e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 * 
-                                    (cdf.n1[isteps[i],:,1,ielhe] - b_c_he[isteps[i],:] * 
-                                        cdf.nstar[isteps[i],:,1,ielhe] * stim_term_2[winds[i],:,k])
+                                    (cdf.n1[isteps[k],:,1,ielhe] - b_c_he[isteps[k],:] * 
+                                        cdf.nstar[isteps[k],:,1,ielhe] * stim_term_2[winds[i],:,k])
                                                   ) 
-                    jbf_hebf63[winds[i],:,k] = (
+                    jbf_hebf62[winds[i],:,k] = (
                                     jcoeff[winds[i],:,k] * 5.50e-18 * (cc_ang/2592.80e0)**3 / 
                                     (cc_ang/wavels_ang[winds[i]])**3 *  
-                                    b_c_he[isteps[i],:] * cdf.nstar[isteps[i],:,1,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
+                                    b_c_he[isteps[k],:] * cdf.nstar[isteps[k],:,1,ielhe] * (cc_ang)/(wavels_ang[winds[i]])**2
+          
                                                )
-    # Total Opacities
+    
+    # Include Helium II higher levels LTE
+    winds = ( np.where((wavels_ang > 2052.00) & (wavels_ang < 3647.00)) )[0]
+    upplevs = np.array([4,5,6,7,8])
+    if len(winds) != 0: 
+        zz_he=2e0 
+        for n in range(len(upplevs)): #Fortran numbering, so include levels n = 5, 6, 7
+            crhbf = prfhbf_rad(wavels_ang[winds], zz_he, upplevs[n])
+            for k in range(num_times):
+                hnukt = 157896.e0 / (upplevs[n] * upplevs[n] * cdf.tg1[isteps[k],:])
+                const = (
+                        4.1416e-16 * cdf.ne1[isteps[k],:] * nhe[isteps[k],:,8] /
+                        (cdf.tg1[isteps[k],:] * np.sqrt(cdf.tg1[isteps[k],:]))
+                        )
+                pop = upplevs[n] * upplevs[n] * const * np.exp(hnukt)
+                for i in range(len(winds)):
+                    if crhbf[i] != 0:
+                       alpha_heiibf_upper[winds[i],:,k] = (
+                                alpha_heiibf_upper[winds[i],:,k] + crhbf[i] * pop * (1.0 - stim_term_2[i,:,k])
+                                                          )
+    winds = ( np.where((wavels_ang > 3647.00)) )[0]
+    upplevs = np.array([5,6,7,8])
+    if len(winds) != 0: 
+        zz_he=2e0 
+        for n in range(len(upplevs)): #Fortran numbering, so include levels n = 5, 6, 7
+            crhbf = prfhbf_rad(wavels_ang[winds], zz_he, upplevs[n])
+            for k in range(num_times):
+                hnukt = 157896.e0 / (upplevs[n] * upplevs[n] * cdf.tg1[isteps[k],:])
+                const = (
+                        4.1416e-16 * cdf.ne1[isteps[k],:] * nhe[isteps[k],:,8] /
+                        (cdf.tg1[isteps[k],:] * np.sqrt(cdf.tg1[isteps[k],:]))
+                        )
+                pop = upplevs[n] * upplevs[n] * const * np.exp(hnukt)
+                for i in range(len(winds)):
+                    if crhbf[i] != 0:
+                       alpha_heiibf_upper[winds[i],:,k] = (
+                                alpha_heiibf_upper[winds[i],:,k] + crhbf[i] * pop * (1.0 - stim_term_2[i,:,k])
+                                                          )
+
+
+   ####
+   # Background metals
+   ####
+    # Include the contribution from background metals using the opctab.dat tables used
+    # in the actual RADYN simulation. 
+    xcontm_tmp = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    xcontm = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    if include_metals == True:
+        metal_file = rd.OpcFile(path='./opctab.dat')
+        roptab_tmp = metal_file.roptab(cdf.tg1[isteps[0],:],cdf.ne1[isteps[0],:],4)
+        iw = ([np.where(np.abs(x - roptab_tmp['wavel']) < 0.5) for x in wavels_ang])
+        for i in range(num_waves):
+            if np.array(iw[i]).size == 0:
+                print(' >>> ERROR <<<')
+                print(' ... i = '+str(i))
+                print(' ... wavels_ang = '+str(wavels_ang[i]))
+                print(' ... no wavelength in range in opctab.dat')
+                ### SHOULD ADD SOMETHING TO END THE PROGRAM HERE
+
+        for i in range(num_waves):
+            for k in range(num_times):
+                # opacity from metals per h,  opacity in cm^2/cm^3
+                roptab_tmp2 = metal_file.roptab(cdf.tg1[isteps[k],:],cdf.ne1[isteps[k],:],(iw)[i][0][0]+4)
+                xcontm_tmp = roptab_tmp2['v']
+                xcontm[i,:,k] = xcontm_tmp*toth[isteps[k],:] 
+        
+   ####
+   # H2 scattering
+   #### 
+    # Include the contribution from Rayleigh scattering of H2, as is done in RADYN.
+    # The populations are computed as in RADYN's source code. 
+    # This is mainly for use with M Dwarf stars, with cooler photospheres than the 
+    # usual quiet Solar atmospheres. 
+    # Have not yet included illumination boundary condition to mimic neighbouring 
+    # loops.
+    scatrh2 = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    nh2_pop = np.zeros([len(cdf.time),cdf.ndep],dtype=float)
+    if (include_h2 == True): 
+        arh2 = np.array([ 8.779e+01, 1.323e+06, 2.245e+10 ])
+
+        # Rayleigh scattering, from RH's hydrogen.c
+        # sigma in units of Mb, 1.0E-22 m^2
+        lamrh2 = ( np.array([ 121.57, 130.00, 140.00, 150.00, 160.00, 170.00, 185.46, 
+                   186.27, 193.58, 199.05, 230.29, 237.91, 253.56, 275.36, 
+                   296.81, 334.24, 404.77, 407.90, 435.96, 546.23, 632.80 ])
+                 )
+        sigmarh2 = ( np.array([ 2.35E-06, 1.22E-06, 6.80E-07, 4.24E-07, 2.84E-07, 2.00E-07, 1.25E-07, 
+                   1.22E-07, 1.00E-07, 8.70E-08, 4.29E-08, 3.68E-08, 2.75E-08, 1.89E-08,  
+                   1.36E-08, 8.11E-09, 3.60E-09, 3.48E-09, 2.64E-09, 1.04E-09, 5.69E-10 ])
+                   )
+      
+        nh2_pop = poph2(cdf)
+        for i in range(len(winds)):
+            for k in range(num_times):
+                winds = (np.where((wavels_ang[i] <= 6328.00) & (wavels_ang[i] >= 1215.70)))[0]
+                if len(winds) == 0:
+                    sigmarh2_cgs = np.interp(wavels_ang[i], lamrh2 * 10.0, sigmarh2) * 1e-22 * 1e4
+                else: 
+                   lambda2 = 1e0 / (wavels_ang[i]/10e0)**2
+                   sigmarh2_cgs = (arh2[0] + (arh2[1] + arh2[2]*lambda2) * lambda2) * lambda2**2 * 1e-22 * 1e4
+         
+                scatrh2[i,:,k] = sigmarh2_cgs * nh2_pop[isteps[k],:]  
+
+
+   ####
+   # Total Opacity and Emissivity
+   ####    
+    # Total Opacity
     # The sum of:
     #       1) H b-f nlte opacity
     #       2) H b-f upper levels
     #       3) H f-f opacity
     #       4) H- b-f opacity
     #       5) H- f-f opacity
-    #       6) Metal background opacity
-    #       7) Thomson scattering
-    #       8) Rayleigh scattering
-    #       9) Helium contributions
     alpha_tot = (
                 alpha_hbf_nlte + alpha_hbf_upper + alpha_hff + 
-                alpha_hmbf + alpha_hmff)# + 
-                #xcontm
-                #)
+                alpha_hmbf + alpha_hmff)
 
-    if (include_scatt == True):  
-        alpha_tot = alpha_tot + scatne  + scatrh
+    #       6) Metal background opacity
+    if (include_metals == True):
+        alpha_tot = alpha_tot + xcontm
+
+    #       7) Thomson scattering
+    #       8) Rayleigh scattering
+    #if (include_scatt == True):  
+    alpha_tot = alpha_tot + scatne  + scatrh
+   
+    #       9) Helium contribution
     if (include_helium == True): 
-        alpha_tot = alpha_tot + alpha_hebf62 + alpha_hebf63 + alpha_hebf64  + alpha_hebf65 
+        alpha_tot = alpha_tot + alpha_hebf62 + alpha_hebf63 + alpha_hebf64  + alpha_hebf65 + alpha_heiibf_upper
+   
+    #      10) H2 Rayleigh Scattering contribution
+    if (include_h2 == True):
+        alpha_tot = alpha_tot + scatrh2
+
 
     # Total Emissivity 
-    #j_tot = jbf_hbf_nlte + (alpha_hff + alpha_hmbf + alpha_hmff + alpha_hbf_upper + xcontm) * sourceBp 
+    # The sum of:
+    #       1) H b-f nlte 
+    #       2) H b-f upper levels
+    #       3) H f-f 
+    #       4) H- b-f 
+    #       5) H- f-f 
     j_tot = jbf_hbf_nlte + (alpha_hff + alpha_hmbf + alpha_hmff + alpha_hbf_upper) * SourceBp 
-         
-    # Add scattering to emissivity   
-    if (include_scatt == True):  
+    
+    #       6) Metal background opacity
+    if (include_metals == True):
+        j_tot = j_tot + xcontm*SourceBp
 
+    #       7) Thomson scattering
+    #       8) Rayleigh scattering
+    jlam = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    if (include_scatt == True):  
         # Contribution of scattering to total opacity
         epsilon = (alpha_tot - scatrh - scatne) / alpha_tot
 
@@ -546,53 +715,157 @@ def contin_contrib_fn(cdf, isteps= [0], wavels_ang = [6690.00], mu_ind = -1,
         for i in range(num_waves):
             BP_nu[i,:,:] = SourceBp[i,:,:] / cc_ang * wavels_ang[i]**2.0
         jnu = transp_scat(tau_standard, x_ratio, (epsilon * BP_nu), 1.-epsilon)
-        print(jnu.shape)
 
-        jlam = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
         for i in range(num_waves):
             for k in range(num_times):
                 jlam[i,:,k] = jnu[i,:,k] * cc_ang / wavels_ang[i]**2. # average intensity J_lambda
 
         j_tot = j_tot + jlam * (scatne + scatrh) 
 
+    #       9) Helium contribution
+    if (include_helium == True): 
+        j_tot = j_tot + jbf_hebf62 + jbf_hebf63 + jbf_hebf64 + jbf_hebf65 + alpha_heiibf_upper*SourceBp
     
+    #      10) H2 Rayleigh Scattering contribution
+    if (include_h2 == True):
+        j_tot = j_tot + jlam*scatrh2    
+
+
+
    ########################################################################
    # COMPUTE THE CONTRIBUTION FNS            
    ########################################################################
  
     xx = alpha_tot
     tauq = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
-    jq = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    #jq = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
     tauq[:,0,:] = xx[:,0,:]*1e-9
 
     # calculate the optical depth: tauq
     # optical depth at interface depth k averages the opacity at k and
     # the previous k (the average within the grid cell interfaced by k and k-1)
-    for j in range(1, ndep): 
+    for j in range(1, cdf.ndep): 
         for k in range(num_times):
             tauq[:,j,k] = tauq[:,j-1,k]+0.5*(xx[:,j,k]+xx[:,j-1,k])*(cdf.z1[isteps[k],j]-cdf.z1[isteps[k],j-1])*(-1.0) 
-            jq[:,j,k] = jq[:,j-1,k]+0.5*(j_tot[:,j,k]+j_tot[:,j-1,k])
+            #jq[:,j,k] = jq[:,j-1,k]+0.5*(j_tot[:,j,k]+j_tot[:,j-1,k])
 
 
     # z (and z_ci) is not the same as z1t; the ndep-th value of z is 
     # the average of the (ndep-1)-th and ndep-th value of z1t
-    z = (cdf.z1[isteps,0:cdf.ndep-2]+cdf.z1[isteps,1:cdf.ndep-1])*0.5
-    z=[2*z(0)-z(1),z] ; extrapolate at top of loop
-    z_ci = z ; # z_ci now ndep elements big, with the first element between the average of the 0th value of z1t and some extrapolated
-;  value higher up.
-;dzt_ci=(z[0:ndep-2]-z[1:ndep-1])
-;   dzt_ci = dzt[*,istep]
-  dzt_ci=fltarr(ndep)
-  dzt_ci=(z[0:ndep-2]-z[1:ndep-1])
-; # now jtot and alpha are calculated at the interface depths, and z_ci which
-; is at grid centers, and dzt_ci, is centered on the interface points
-; (jtot, alpha) except 
-    out = {'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2, 'gff':gff, 'SourceBp':SourceBp,
-            'alpha_hff':alpha_hff, 'b_c':b_c, 'phot_crss_1':phot_crss_1, 
-            'alpha_hbf_nlte':alpha_hbf_nlte, 'jbf_hbf_nlte':jbf_hbf_nlte,
-            'alpha_hbf_upper':alpha_hbf_upper, 'nhmin':nhmin, 'alpha_hmbf':alpha_hmbf,
-            'alpha_hmff':alpha_hmff, 'scatrh':scatrh, 'scatne':scatne, 'alpha_tot':alpha_tot, 
-            'j_tot':j_tot, 'wavels_ang':wavels_ang, 'isteps':isteps, 'tsteps':tsteps}
+    z_ci = np.zeros([cdf.ndep,num_times],dtype=float)
+    for k in range(num_times):
+        z_ci[1:,k] = (cdf.z1[isteps[k],0:cdf.ndep-1]+cdf.z1[isteps[k],1:cdf.ndep])*0.5
+        z_ci[0,k] =  2*z_ci[0,k]-z_ci[1,k]    # extrapolate at top of loop
+    # z_ci now ndep elements big, with the first element between the average of the 0th value of z1t and some extrapolated
+    #  value higher up.
+   
+    dzt = np.zeros([num_waves,cdf.ndep,len(cdf.time)],dtype=float)
+    for k in range(num_times):
+        dzt[:,1:cdf.ndep,k] = cdf.z1[k,0:cdf.ndep-1] - cdf.z1[k,1:cdf.ndep]
+    dzt_ci = dzt[:,:,isteps]
+    # now jtot and alpha are calculated at the interface depths, and z_ci which
+    # is at grid centers, and dzt_ci, is centered on the interface points
+    
+
+    # ci at depth ndep is the emissivity at depth ndep attenuated 
+    # by the average optical depth within grid bordered by interfaces
+    # ndep-1 and ndep. 
+    # the contribution function within grid cell bordered by interfaces
+    # ndep-1 and ndep is the emissivity from 
+    # the interface ndep exponentially attenuated by the optical depth
+    # within this grid cell.  
+    # So, ci corresponds to z_ci (interface midpoints), and dzt_ci should be 
+    # the width of the grid cell (=dzt) 
+    ci = j_tot * np.exp(tauq/mu*(-1e0))/mu
+
+    ci_prime = np.zeros([num_waves,cdf.ndep,num_times],dtype=float)
+    for i in range(num_waves):
+        for k in range(num_times):
+            ci_prime[i,:,k] = np.cumsum(dzt_ci[i,:,k] * ci[i,:,k])/np.sum(dzt_ci[i,:,k] * ci[i,:,k]) 
+
+
+
+    tau_ci = tauq / mu
+    srcfunc = j_tot/xx 
+    for i in range(num_waves):
+        srcfunc[i,:,:] = srcfunc[i,:,:] * wavels_ang[i]**2 / cc_ang
+
+    logm = np.log10(cdf.cmass1[isteps,:])
+    dlogm_tmp = np.abs(logm[:,0:cdf.ndep-1]-logm[:,1:cdf.ndep])
+    dlogm = np.zeros([num_times,cdf.ndep],dtype=float)
+    for i in range(num_times):
+        dlogm[i,:] = np.append([-5],dlogm_tmp[i,:])
+    ci_dlogm = ci * dzt_ci 
+    for k in range(num_times):
+        ci_dlogm[:,:,k] = ci_dlogm[:,:,k] / dlogm[k,:]
+    
+    
+    cont_cool = j_tot - jlam * alpha_tot
+   
+
+
+    #******** ----- to be added later, comparing output intensity
+    # to integral of C fn
+
+    # Compute the continuum intensity for the full run
+    #contflux, cont_lambda, cont_flux, cont_int, /non_zero
+    #cont_int_ex = cont_int[wavel_ind, mu_ind, istep]
+
+    #Compute the ratio
+    #integ_ci = np.sum(dzt_ci*ci,axis=1) 
+
+    #intvscont = cont_int_ex/integ_ci
+
+
+    if basic_out == True: 
+        print('>>> Basic output only')
+        out = {'alpha_tot':alpha_tot, 
+              'j_tot':j_tot, 'wavels_ang':wavels_ang, 'isteps':isteps, 'tsteps':tsteps}
+    elif full_out == True:
+        out = {
+              'SourceBp':SourceBp, 
+              'alpha_hbf_nlte':alpha_hbf_nlte, 'alpha_hbf_upper':alpha_hbf_upper, 
+              'alpha_hff':alpha_hff, 'alpha_hmbf':alpha_hmbf, 'alpha_hmff':alpha_hmff,
+              'xcontm': xcontm, 'scatne':scatne, 'scatrh':scatrh, 'scatrh2':scatrh,
+              'alpha_hebf62':alpha_hebf62, 'alpha_hebf63':alpha_hebf63, 'alpha_hebf64':alpha_hebf64, 
+              'alpha_hebf65':alpha_hebf65, 'alpha_heiibf_upper':alpha_heiibf_upper,
+              'alpha_tot':alpha_tot, 'nh2_pop':nh2_pop, 'nhmin':nhmin,
+              'jbf_hbf_nlte':jbf_hbf_nlte, 'j_hff':alpha_hff*SourceBp, 'j_hmbf':alpha_hmbf*SourceBp, 
+              'j_hmff':alpha_hmff*SourceBp, 'j_hbf_upper':alpha_hbf_upper*SourceBp, 
+              'j_metals':xcontm*SourceBp, 'j_ne':jlam*scatne, 'j_rh':jlam*scatrh, 'j_rh2':jlam*scatrh2,
+              'jbf_hebf62':jbf_hebf62, 'jbf_hebf63':jbf_hebf63, 'jbf_hebf64':jbf_hebf64, 
+              'jbf_hebf65':jbf_hebf65, 'j_heiibf_upper':alpha_heiibf_upper*SourceBp,
+              'j_tot':j_tot, 'jlam':jlam, 
+              'tauq':tauq, 'z_ci':z_ci, 'dzt_ci':dzt_ci, 'ci':ci, 'tau_ci':tau_ci, 'mu':mu, 
+              'srcfunc':srcfunc, 
+              'ci_dlogm':ci_dlogm, 'logm':logm, 'dlogm':dlogm, 'cont_cool':cont_cool,
+              'wavels_ang':wavels_ang, 'isteps':isteps, 'tsteps':tsteps,
+              'gauntbf1':gauntbf1, 'gauntbf2':gauntbf2,'gauntbf3':gauntbf3,'gauntbf4':gauntbf4,
+              'gauntbf5':gauntbf5, 'gff':gff,
+              'phot_crss_1':phot_crss_1,'phot_crss_2':phot_crss_2,'phot_crss_3':phot_crss_3,
+              'phot_crss_4':phot_crss_4,'phot_crss_5':phot_crss_5, 
+              'b_c':b_c, 'b_c_he':b_c_he, 'stim_term':stim_term, 'stim_term2':stim_term2,
+              'mu':mu}
+    else:
+        out = {
+              'SourceBp':SourceBp, 
+              'alpha_hbf_nlte':alpha_hbf_nlte, 'alpha_hbf_upper':alpha_hbf_upper, 
+              'alpha_hff':alpha_hff, 'alpha_hmbf':alpha_hmbf, 'alpha_hmff':alpha_hmff,
+              'xcontm': xcontm, 'scatne':scatne, 'scatrh':scatrh, 'scatrh2':scatrh,
+              'alpha_hebf62':alpha_hebf62, 'alpha_hebf63':alpha_hebf63, 'alpha_hebf64':alpha_hebf64, 
+              'alpha_hebf65':alpha_hebf65, 'alpha_heiibf_upper':alpha_heiibf_upper,
+              'alpha_tot':alpha_tot, 'nh2_pop':nh2_pop,'nhmin':nhmin,
+              'jbf_hbf_nlte':jbf_hbf_nlte, 'j_hff':alpha_hff*SourceBp, 'j_hmbf':alpha_hmbf*SourceBp, 
+              'j_hmff':alpha_hmff*SourceBp, 'j_hbf_upper':alpha_hbf_upper*SourceBp, 
+              'j_metals':xcontm*SourceBp, 'j_ne':jlam*scatne, 'j_rh':jlam*scatrh, 'j_rh2':jlam*scatrh2,
+              'jbf_hebf62':jbf_hebf62, 'jbf_hebf63':jbf_hebf63, 'jbf_hebf64':jbf_hebf64, 
+              'jbf_hebf65':jbf_hebf65, 'j_heiibf_upper':alpha_heiibf_upper*SourceBp,
+              'j_tot':j_tot, 'jlam':jlam, 
+              'tauq':tauq, 'z_ci':z_ci, 'dzt_ci':dzt_ci, 'ci':ci, 'tau_ci':tau_ci, 'mu':mu, 
+              'srcfunc':srcfunc, 
+              'ci_dlogm':ci_dlogm, 'logm':logm, 'dlogm':dlogm, 'cont_cool':cont_cool,
+              'wavels_ang':wavels_ang, 'isteps':isteps, 'tsteps':tsteps, 'mu':mu
+              }
 
     return out
 
