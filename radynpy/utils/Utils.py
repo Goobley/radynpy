@@ -1,13 +1,15 @@
 import numpy as np
 from scipy import special
+import warnings
 
-# https://www.harrisgeospatial.com/docs/VOIGT.html
-# https://www.uio.no/studier/emner/matnat/astro/AST4310/h15/undervisningsmateriale/ssa_sample.pdf
 def voigt_H(a, v):
+    '''
+    Voigt H function -- same as is used in Lightweaver.
+    '''
     z = (v + 1j * a)
     return special.wofz(z).real
 
-def gaunt_factor(n, qf):
+def gaunt_bf_h(n, qf):
     # ;+
     # ;   gaunt(nn,qf)
     # ;
@@ -17,6 +19,8 @@ def gaunt_factor(n, qf):
     # ;            qf = frequency 
     # ;
     # ;-
+    # TODO(cmo): Replace with more general one underneath
+    warnings.warn('This function is to be replaced with the more general gaunt_bf', DeprecationWarning)
     x = qf/2.99793e14
     if n == 1:
         gaunt = 1.2302628 + x*( -2.9094219e-3+x*(7.3993579e-6-8.7356966e-9*x) )+ (12.803223/x-5.5759888)/x
@@ -43,40 +47,45 @@ def gaunt_factor(n, qf):
 
     return gaunt
 
-def gaunt_bf(wvls = [], n = 1, Z = 1, *args):
+def gaunt_bf(wvls, n = 1, Z = 1):
 
     '''
-    Calculates the bound-free Gaunt fn for a given 
-    wavelength and quantum number.
-
+    Calculates the bound-free Gaunt fn for a given wavelength and quantum
+    number.
+    
     M. J. Seaton (1960), Rep. Prog. Phys. 23, 313
-
-    This is the same calculation that is used in
-    RH 
+    
+    This is the same calculation that is used in RH.
 
     Parameters
-    __________
+    ----------
 
-    wvls : float
-            the wavelength(s)
-    n : int, optional
-        Principal quantum number (default = 1) 
-    Z : int, optional
-        charge (default = 1)
+    wvls : `array_like` (1D)
+        The wavelengths (Angstrom).
+    n : `int`, optional
+        Principal quantum number (default = 1).
+    Z : `int`, optional
+        Charge (default = 1).
+
+    
+    Returns
+    -------
+
+    gbf : `array`
+        The bound-free Gaunt factors.
 
 
     Graham Kerr, Feb 17th 2020
 
     '''
-    gbf = []
-    for i in range(len(wvls)):
-        x    = (6.626e-27 * 3e18) / wvls[i] / (2.1799e-11 * Z**2)
-        x3   = x**(0.33333333e0)
-        nsqx = 1e0 / (n**2 * x)     
 
-        gbf.append(1e0 + 0.1728*x3 * (1e0 - 2e0*nsqx) - 0.0496*(x3)**2 * (1e0 - (1e0 - nsqx)*0.66666667*nsqx))
+    wvls = np.asarray(wvls)
 
-     
+    x    = (6.626e-27 * 3e18) / wvls / (2.1799e-11 * Z**2)
+    x3   = x**(1.0/3.0)
+    nsqx = 1.0 / (n**2 * x)     
+    gbf = 1.0 + 0.1728*x3 * (1.0 - 2.0*nsqx) - 0.0496*(x3)**2 * (1.0 - (1.0 - nsqx)*(2.0/3.0)*nsqx)
+
     return gbf
 
 def hydrogen_bf_profile(wl, z, i):
@@ -98,7 +107,7 @@ def hydrogen_bf_profile(wl, z, i):
         return 0.0
     
     frq = 2.9979e18/wl
-    g = gaunt_factor(i,frq)
+    g = gaunt_bf_h(i,frq)
     pr0 = 1.04476e-14*z*z*z*z
     a5 = float(i)**5
     wm = wl*1.0e-4
@@ -208,25 +217,32 @@ def hydrogen_absorption(xlamb, icont, temp, ne, nh): #xconth, xconth_lte):
     xconth=abhmbf+abhmff+abhbf+abhff
     return xconth, xconth_lte
 
-def planck_fn(wvls = [], tg = [], *args):
+def planck_fn(wvls, tg):
 
     '''
-    Calculates the Planck fn in units of 
-    [ergs /s / cm^2 / sr / ang] given wavelength
-    in angstrom and temperature in Kelvin. 
-
-    e.g. to produce the Planck Fn at 5800K 
-    from 2000 to 10000 A every 1 angstrom:
+    Calculates the Planck fn in units of [erg / s / cm^2 / sr / AA] given
+    wavelength in angstrom and temperature in Kelvin.
+    
+    e.g. to produce the Planck Fn at 5800K from 2000 to 10000 A every 1
+    angstrom:
+    ```
         wvls = np.arange(2000,10001,1,dtype=float)
         bb = planck_fn(wvls, tg=5800.00)
+    ```
 
     Parameters
-    __________
+    ----------
 
-    wvls : float
-           the wavelength(s)
-    tg : float
-         gas temperature 
+    wvls : `array_like` (1D)
+        The wavelengths (Angstrom).
+    tg : `array_like` (1D)
+        Gas temperature (K).
+
+    Returns
+    -------
+
+    bb : `array` (2D)
+        Black-body intensity as a squeezed 2D array of shape [len(wvls), len(tg)].
    
     Graham Kerr, Feb 18th 2020
 
@@ -234,20 +250,17 @@ def planck_fn(wvls = [], tg = [], *args):
 
     # Convert to np array in case it is in input 
     # as a regular list
-    wvls = np.array(wvls)
-    tg = np.array(tg)
+    wvls = np.atleast_1d(np.asarray(wvls))
+    tg = np.atleast_1d(np.array(tg))
 
     # Convert to wavelength in cm
     w = wvls / 1.0e8 
 
     # Constants appropriate to cgs units.
-    c1 =  3.7417749e-05     # =2*!DPI*h*c*c       
+    c1 =  3.7417749e-05     # =2*pi*h*c**2       
     c2 =  1.4387687e0       # =h*c/k
 
-    bbflux = np.zeros([len(wvls),len(tg)],dtype=float)
-    for i in range(len(tg)):
-        bbflux[:,i] =  ([c1 / ( x**5 * ( np.exp( c2/tg[i]/x )-1.e0 ) ) for x in w]) 
+    bbflux = c1 / (w[:, None]**5 * (np.exp(c2 / tg[None,  :] / w[:, None]) - 1.0))
+    bbflux *= 1e-8 / np.pi
 
-    bbint = bbflux*1.0e-8/np.pi
-
-    return bbint
+    return bbflux.squeeze()
