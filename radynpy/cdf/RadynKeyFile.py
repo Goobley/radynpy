@@ -4,7 +4,7 @@ import pickle
 from radynpy.cdf.auxtypes import Val, Array
 import numpy as np
 
-cdfFile = '/local1/scratch/RadynGrid/radyn_out.val3c_d3_1.0e11_t20s_10kev_fp'
+cdfFile = '/data/crisp/RadynGrid/radyn_out.val3c_d3_1.0e11_t20s_10kev_fp'
 
 res = {}
 cdf = cdflib.CDF(cdfFile)

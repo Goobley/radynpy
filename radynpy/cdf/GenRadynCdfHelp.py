@@ -135,6 +135,8 @@ frq[nu,krc]
 frequency in hz for continua!!nin nu=0 the frequency for the edge is stored!!nin nu=1:nq[kr] the frequency points
 zmu[mu]
 cosine of angle vs z-axis (xmu and ymu also exist but are not used except for 1D MHD)
+wmu[mu]
+Gauss-Legendre weights for RT rays
 atmoid
 72 character identification of atmosphere used
 dpid
