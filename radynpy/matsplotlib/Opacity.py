@@ -1,5 +1,5 @@
 import numpy as np
-from radynpy.utils import voigt_H, gaunt_factor, hydrogen_absorption, hydrogen_bf_profile
+from radynpy.utils import voigt_H, gaunt_bf_h, hydrogen_absorption, hydrogen_bf_profile
 import struct
 import os
 here = os.path.dirname(os.path.abspath(__file__)) + '/'

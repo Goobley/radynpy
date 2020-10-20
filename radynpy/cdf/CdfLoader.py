@@ -220,6 +220,17 @@ class LazyRadynData:
             return getattr(self, name)
         else:
             raise AttributeError('Unknown attribute "%s" requested' % name)
+
+    def load_var(self, name):
+        '''
+        Load a variable that may not be present in the help documentation,
+        and hence not auto-loaded by __getattr__. Variable will be loaded
+        into self.name.
+
+        Raises : ValueError if variable with name not present in CDF.
+        '''
+        var = self.cdf.varget(name)
+        setattr(self, name, var)
     
     def index_convention(self):
         '''
