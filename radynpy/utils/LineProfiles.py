@@ -42,7 +42,7 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
         tind2 = np.abs(cdf.time-t1).argmin()
     else:
         tind2 = len(cdf.time)-1
-        t2 = cdf.time[tind2]
+        # t2 = cdf.time[tind2]
 
 
 
@@ -50,10 +50,10 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
     mq = np.nanmax(cdf.nq)
     # nt = cdf.time.shape[0]
     nt = len(cdf.time[tind1:tind2+1])
-    ii = cdf.q[0:cdf.nq[kr]+1,kr]
+    ii = cdf.q[0:cdf.nq[kr],kr]
     wavel = np.zeros(mq,dtype=np.float64)
     wavel[0:cdf.nq[kr]]=cdf.alamb[kr]/(cdf.q[0:cdf.nq[kr],kr]*cdf.qnorm*1e5/cdf.cc+1)
-    wavel = np.flip(wavel)
+    wavel = np.flip(wavel[0:cdf.nq[kr]])
     line_int = np.zeros([cdf.nmu,mq,nt],dtype=np.float64)
     line_flux = np.zeros([mq,nt],dtype=np.float64)
 
@@ -68,6 +68,8 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
 
     rest_wave = cdf.alamb[kr]
 
+    t1 = cdf.time[tind1]
+    t2 = cdf.time[tind2]
     times = cdf.time[tind1:tind2+1]
 
     ######################################################################## 
@@ -81,6 +83,7 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
                  't1':t1, 't2':t2, 
                  'tind1':tind1,'tind2':tind2,
                  'times':times,
+                 'nq':cdf.nq[kr],
                  'Units':'int in [erg/s/cm^2/sr/A], flux in [erg/s/cm^2/A], wavelength in [A], t1,2 in[s]'}
 
 
@@ -151,12 +154,14 @@ def lcurve(cdf, kr, w1 = 0, w2 = 0, t1 = 0, t2 = 0):
         w1 = line['wavelength'][wind1]
     else:
         wind1 = 0
-
+        # w1 = line['wavelength'][wind1]
     if w2 !=0:
         wind2 = np.abs(line['wavelength']-w2).argmin()
         w2 = line['wavelength'][wind2]
     else:
-        wind2 = cdf.nq[kr]
+        wind2 = cdf.nq[kr]-1
+        # w2 = line['wavelength'][wind2]
+
 
     ######################################################################## 
     # Integrate the line intensity and flux over wavelength
@@ -168,15 +173,21 @@ def lcurve(cdf, kr, w1 = 0, w2 = 0, t1 = 0, t2 = 0):
     lcurve_flux = np.zeros([line['line_flux'].shape[1]], dtype=np.float64)
     
     for tind in range(line['line_int'].shape[2]):
-        lcurve_flux[tind] = np.trapz(line['line_flux'][wind1:wind2,tind],line['wavelength'][wind1:wind2])
+        lcurve_flux[tind] = np.trapz(line['line_flux'][wind1:wind2+1,tind],line['wavelength'][wind1:wind2+1])
         for muind in range(line['line_int'].shape[0]):
-            lcurve_int[muind, tind] = np.trapz(line['line_int'][muind,wind1:wind2,tind],line['wavelength'][wind1:wind2])
+            lcurve_int[muind, tind] = np.trapz(line['line_int'][muind,wind1:wind2+1,tind],line['wavelength'][wind1:wind2+1])
 
     times = cdf.time[tind1:tind2+1]
 
     ######################################################################## 
     # Output the results
     ########################################################################
+
+    t1 = cdf.time[tind1]
+    t2 = cdf.time[tind2]
+    w1 = line['wavelength'][wind1]
+    w2 = line['wavelength'][wind2]
+
 
     out_dict = {'lcurve_flux':lcurve_flux,
                 'lcurve_int':lcurve_int,
