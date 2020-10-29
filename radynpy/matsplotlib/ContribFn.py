@@ -68,7 +68,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         Print progress information to stdout. (default: False)
     returnData : bool, optional
         Return a dictionary of the data computed to produce the plots. (default: False)
-    opctab : str, optional
+    opctabPath : str, optional
         Path to non-standard opctab.dat if needed. (default: False)
     '''
     with warnings.catch_warnings():
@@ -466,7 +466,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
                                             hspace=-0.18, wspace=0.01)
             
         if returnData:
-            out = {'atomId': cdf.atomid[iel], 
+            out = {'atomId': cdf.atomid[0][iel], 
                    'kr': kr,
                    'iel': iel,
                    'levels': [jTrans, iTrans], 
@@ -474,11 +474,16 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
                    'emissivity': zTot[np.ix_(iwx, iwy)][:,:, 0, 0],
                    'opacity': zTot[np.ix_(iwx, iwy)][:,:, 0, 1],
                    'contFn': zTot[np.ix_(iwx, iwy)][:,:, 1, 1],
+                   'tau': tauq_ny,
                    'tau1': tau1,
                    'dVel': dVel,
                    'xEdges': xEdges,
                    'yEdges': yEdges,
-                   'y': y
+                   'y': y,
+                   'wavelength':wavelength,
+                   'lineProfile':lineProfile,
+                   'iwy':iwy,
+                   'iwx':iwx
                   }
             return out
 
