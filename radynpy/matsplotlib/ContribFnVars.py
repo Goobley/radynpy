@@ -8,9 +8,9 @@ from matplotlib.ticker import MaxNLocator, LogLocator, ScalarFormatter
 import warnings
 from radynpy.matsplotlib import xt_calc
 
-def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu=-1, 
+def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu=-1,
                heatPerParticle=False, wingOffset=None,
-               dvMouseover=False, withBackgroundOpacity=True, colors={}, 
+               dvMouseover=False, withBackgroundOpacity=True, colors={},
                tightenLayout=True, printMiscTopData=True, stdoutInfo=False,
                opctabPath=None):
     '''
@@ -22,7 +22,7 @@ def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0
         The RadynData object containing the data to compute the contribution function from.
         Due to the number of variables required, it is easier to use a LazyRadynData, if possible.
     kr : int
-        The transition index, see `index_convention` and `var_info` on the RadynData object for 
+        The transition index, see `index_convention` and `var_info` on the RadynData object for
         more information about what this means.
     tStep : int, optional
         The time index at which to compute the contribution function see 't' in the `index_convention`
@@ -59,7 +59,6 @@ def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0
         iel = cdf.ielrad[kr] - 1
 
         # Line intensity data
-        outMu = cdf.outint[tStep,:,mu,:]
         x_ny, tauq_ny = xt_calc(cdf, tStep, iel, kr, withBackgroundOpacity=withBackgroundOpacity, opctabPath=opctabPath)
         dtau = np.zeros((nDep, cdf.nq[kr]))
         dtau[1:,:] = tauq_ny[1:nDep,:] - tauq_ny[:nDep-1,:]
@@ -73,7 +72,7 @@ def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0
         # POSITIVE velocity is blueshift, towards shorter wavelength
         # NEGATIVE velocity is downflow, redshift, towards longer wavelength
         dVel = cdf.q[:nq, kr] * cdf.qnorm # frequency in km/s
-        vMax = np.abs(vRange).max() 
+        vMax = np.abs(vRange).max()
         wlIdxs = np.argwhere(np.abs(dVel) < vMax).ravel()
         nFreq = len(wlIdxs)
 
@@ -96,7 +95,7 @@ def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0
         for ny in range(nFreq):
             tau1[ny] = pchip_interpolate(np.log10(tauq_ny[1:, ny+ny0]), y[1:], 0.0)
 
-        # Build a silly 4D matrix to contain the data... this would probably just as well be 
+        # Build a silly 4D matrix to contain the data... this would probably just as well be
         # a list of 4 matrices given the way we use it
         zTot = np.zeros((nFreq, nDep, 2, 2))
         zTot[:, :, 0, 0] = (z1Local * z3).T # Xv / tau
@@ -110,7 +109,7 @@ def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0
         iwx = np.argwhere((x > np.min(vRange)) & (x < np.max(vRange))).flatten()
         vRange = [np.max(x[iwx]), np.min(x[iwx])] # invert x axis
 
-        # Find the deltav / frequency indices for the core and wing indices, 
+        # Find the deltav / frequency indices for the core and wing indices,
         # where the wingOffset is specified in Angstrom from the line core.
         coreIdx = np.argmin(np.abs(dVel[wlIdxs]))
         if wingOffset is None:
@@ -133,30 +132,30 @@ def contrib_fn_vars(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0
             tRad = h * c / k / l / np.log(2.0 * h * c / intens / (l**3) + 1.0)
             return tRad
 
-      
+
         xEdges = 0.5 * (x[iwx][:-1] + x[iwx][1:])
-        xEdges = np.insert(xEdges, 0, x[iwx][0]) 
+        xEdges = np.insert(xEdges, 0, x[iwx][0])
         xEdges = np.insert(xEdges, -1, x[iwx][-1])
 
         yEdges = 0.5 * (y[iwy][:-1] + y[iwy][1:])
         yEdges = np.insert(yEdges, 0, y[iwy][0])
         yEdges = np.insert(yEdges, -1, y[iwy][-1])
 
-       
-        
-        lineProfile = cdf.outint[tStep, 1:cdf.nq[kr]+1, mu, kr]
+
+
+        lineProfile = np.copy(cdf.outint[tStep, 1:cdf.nq[kr]+1, mu, kr])
         lineProfile -= lineProfile.min()
         lineProfile /= lineProfile.max()
         lineProfile *= (y[iwy][0] - y[iwy][-1])
         lineProfile += y[iwy][-1]
-       
 
-            
-        
-        out = {'atomId': cdf.atomid[0][iel], 
+
+
+
+        out = {'atomId': cdf.atomid[0][iel],
                    'kr': kr,
                    'iel': iel,
-                   'levels': [jTrans, iTrans], 
+                   'levels': [jTrans, iTrans],
                    'emissivity': zTot[np.ix_(iwx, iwy)][:,:, 0, 0],
                    'opacity': zTot[np.ix_(iwx, iwy)][:,:, 0, 1],
                    'contFn': zTot[np.ix_(iwx, iwy)][:,:, 1, 1],
