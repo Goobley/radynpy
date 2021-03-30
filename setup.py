@@ -5,7 +5,7 @@ def readme():
         return f.read()
 
 setup(name='radynpy',
-      version='0.5.0',
+      version='0.4.3',
       description='Analysis tools for Radyn in Python',
       long_description=readme(),
       url='http://github.com/Goobley/radynpy',
@@ -13,7 +13,7 @@ setup(name='radynpy',
       author_email='c.osborne.1@research.gla.ac.uk',
       license='MIT',
       packages=find_packages(),
-      install_requires=['numpy', 'scikit-image', 'matplotlib', 'scipy', 'colour', 'palettable', 'cdflib'],
+      install_requires=['numpy', 'scikit-image', 'matplotlib', 'scipy', 'colour', 'palettable', 'cdflib', 'plotly','pandas'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'Intended Audience :: Science/Research',
