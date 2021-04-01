@@ -68,7 +68,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         Print progress information to stdout. (default: False)
     returnData : bool, optional
         Return a dictionary of the data computed to produce the plots. (default: False)
-    opctab : str, optional
+    opctabPath : str, optional
         Path to non-standard opctab.dat if needed. (default: False)
     '''
     with warnings.catch_warnings():
@@ -90,7 +90,6 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         iel = cdf.ielrad[kr] - 1
 
         # Line intensity data
-        outMu = cdf.outint[tStep,:,mu,:]
         x_ny, tauq_ny = xt_calc(cdf, tStep, iel, kr, withBackgroundOpacity=withBackgroundOpacity, opctabPath=opctabPath)
         dtau = np.zeros((nDep, cdf.nq[kr]))
         dtau[1:,:] = tauq_ny[1:nDep,:] - tauq_ny[:nDep-1,:]
@@ -324,7 +323,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         ax[2,0].plot(cdf.vz1[tStep][iwy] * 1e-5, y[iwy], c=vzColor, ls='--')
         ax[2,0].plot(x, tau1, c=tauColor)
         # Adjust line profile to fill plot
-        lineProfile = cdf.outint[tStep, 1:cdf.nq[kr]+1, mu, kr]
+        lineProfile = np.copy(cdf.outint[tStep, 1:cdf.nq[kr]+1, mu, kr])
         lineProfile -= lineProfile.min()
         lineProfile /= lineProfile.max()
         lineProfile *= (y[iwy][0] - y[iwy][-1])
@@ -408,7 +407,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         add_legend(ax[1,1])
 
         # Plot 6: Heating, and Core and Wing Contribution Functions 
-        heat = cdf.bheat1[tStep, iwy]
+        heat = np.copy(cdf.bheat1[tStep, iwy])
         if heatPerParticle:
             # Only using hydrogen density
             heat /= cdf.n1[tStep,:,:6,0].sum(axis=1)[iwy]
@@ -466,19 +465,24 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
                                             hspace=-0.18, wspace=0.01)
             
         if returnData:
-            out = {'atomId': cdf.atomid[iel], 
+            out = {'atomId': cdf.atomid[0][iel],
                    'kr': kr,
                    'iel': iel,
-                   'levels': [jTrans, iTrans], 
+                   'levels': [jTrans, iTrans],
                    'labels': [labelI, labelJ],
                    'emissivity': zTot[np.ix_(iwx, iwy)][:,:, 0, 0],
                    'opacity': zTot[np.ix_(iwx, iwy)][:,:, 0, 1],
                    'contFn': zTot[np.ix_(iwx, iwy)][:,:, 1, 1],
+                   'tau': tauq_ny,
                    'tau1': tau1,
                    'dVel': dVel,
                    'xEdges': xEdges,
                    'yEdges': yEdges,
-                   'y': y
+                   'y': y,
+                   'wavelength':wavelength,
+                   'lineProfile':lineProfile,
+                   'iwy':iwy,
+                   'iwx':iwx
                   }
             return out
 
