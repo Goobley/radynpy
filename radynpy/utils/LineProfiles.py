@@ -14,11 +14,12 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
     kr  : int
           the index of the line transition
     t1  : float
-          the first time at which compute the integrated intensity
+          the first time at which to extract the line profile
           default = 0s
     t2  : float
-          the first time at which compute the integrated intensity
+          the final time at which to extract the line profile
           default = final time
+          The output is a time series between t1-->t2
     
 
     OUTPUTS:  out_dict: A dictionary containing the intensity, flux, and wavelength
@@ -129,6 +130,7 @@ def lcurve(cdf, kr, w1 = 0, w2 = 0, t1 = 0, t2 = 0):
     t2  : float
           the first time at which compute the integrated intensity
           default = final time
+          The output is a time series from t1 --> t2
 
     OUTPUTS:  out_dict: a dictionary holding the lightcurves of intensity,
                         flux, and the time array, in units of
