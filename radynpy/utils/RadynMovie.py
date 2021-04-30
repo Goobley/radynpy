@@ -8,7 +8,8 @@ def rmovie_basicvar(cdf,
                       Mm = False,
                       km = False,
                       savefig = False,
-                      figname = 'radynvar.html'):
+                      figname = 'radynvar.html',
+                      color = 'steelblue'):
 
     '''
     A function to produce an animated figure of RADYN variables.
@@ -155,7 +156,8 @@ def rmovie_basicvar(cdf,
                animation_frame = 'Time [s]',
                log_x = xlog,
                log_y = ylog,
-               template = template)
+               template = template,
+               color_discrete_sequence = [color])
 
     fig1.show()
 
@@ -175,6 +177,7 @@ def rmovie(var1, var2,
                       xtitle = 'Var 1', 
                       ytitle = 'Var 2',
                       title = ' ',
+                      color = 'steelblue',
                       xlog = False, ylog = False):
 
     '''
@@ -285,6 +288,7 @@ def rmovie(var1, var2,
                log_x = xlog,
                log_y = ylog,
                title = title,
+               color_discrete_sequence = [color],
                template = template)
 
     fig1.show()
