@@ -13,7 +13,7 @@ setup(name='radynpy',
       author_email='c.osborne.1@research.gla.ac.uk',
       license='MIT',
       packages=find_packages(),
-      install_requires=['numpy', 'scikit-image', 'matplotlib', 'scipy', 'colour', 'palettable', 'cdflib'],
+      install_requires=['numpy', 'scikit-image', 'matplotlib', 'scipy', 'colour', 'palettable', 'cdflib', 'plotly','pandas'],
       classifiers=[
           'Development Status :: 3 - Alpha',
           'Intended Audience :: Science/Research',
