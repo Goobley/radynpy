@@ -264,3 +264,508 @@ def planck_fn(wvls, tg):
     bbflux *= 1e-8 / np.pi
 
     return bbflux.squeeze()
+
+    
+def prfhbf_rad(wvls = [], Z = 1, n=6, *args):
+
+    '''
+    A function to return the absorption 
+    cross section fr a hydrogenic ion 
+    *** Originaly from abshyd.pro subroutine
+        in RADYN, and uses Fortran indexing.
+        Using this code to ensure that we 
+        compute the upper level contribution
+        to the opacity in the same way that 
+        RADYN does internally.
+    Parameters
+    __________
+    wvls : float
+            the wavelength(s)
+    n : int, optional
+        The level from which absorption
+        takes place. FORTRAN NUMBERING, legacy
+        from RADYN (default = 6, i.e. level 6)
+    Z : int, optional
+        charge (default = 1)
+    Graham Kerr, Feb 19th 2020
+    '''
+    wvls = np.array(wvls)
+
+    prfhbf = np.zeros([len(wvls)],dtype=float)
+
+    wl0 = 911.7535278/(Z*Z)*n*n
+
+    for i in range(len(wvls)):
+
+        if (wvls[i] > wl0):    
+          
+            prfhbf[i] = 0.0
+        
+        else: 
+    
+            frq = 2.9979e18/wvls[i]
+
+            gau = gaunt_factor(n,frq)
+            
+            pr0 = 1.04476e-14*Z*Z*Z*Z
+    
+            a5 = n**5
+            a5 = np.float(a5)
+
+            wm = wvls[i]*1.0e-4
+
+            wm3 = wm*wm*wm
+
+            prfhbf[i] = pr0*wm3*gau/a5
+
+     
+    return prfhbf
+
+def hminus_pops(tg1, ne1, nh, bhmin=1.0, *args):
+
+    '''
+    A function to return the H minus populations
+    Parameters
+    __________
+    tg1 : float
+          the temperature stratification 
+    nh  : float
+          the population densities of hydrogen 
+    bhmin : float, optional
+            the departure coefficient from LTE
+            for H minus (default = 0).
+    Make sure the tg, and nh have dimensions of 
+    [timesteps, height], and [timesteps, height, level]
+   
+    The density of H minus from  
+    Vernazza et al. 1976, ApJS 30
+    Graham Kerr, Feb 19th 2020
+    '''
+    ndep = (tg1.shape)[1]
+    num_times = (tg1.shape)[0]
+    num_levs = (nh.shape)[2]
+
+    nhmin = np.zeros([num_times,ndep],dtype=float)
+    totnhi = np.sum(nh[:,:,0:num_levs-1],axis = 2) # Density of neutral hydrogen
+
+    for k in range(num_times):
+        nhmin[k,:] = (
+                1.0354e-16 * bhmin * ne1[k,:] * totnhi[k,:] * 
+                 tg1[k,:]**(-1.5) * np.exp(8762e0/tg1[k,:])
+                     )
+
+    return nhmin
+
+def transp_scat(tau=[],x=[],sc=[],scat=[],
+                *args):
+
+    '''
+    A function to return the average intensity J at some
+    wavelength  
+    Parameters
+    __________
+    
+    tau : float 
+          the optical depth at some standard wavelength 
+          (usually 5000A)
+    x : float
+        the ratio of total opacity to the opacity at some
+        standard wavelength
+    sc : float
+         epsilon B
+    scat: float
+         1 - epsilon 
+    
+    Graham Kerr, Feb 20th 2020
+    '''
+    ntimes = (tau.shape)[0]
+    ndep = (tau.shape)[1]
+    nwave = (x.shape)[0]
+
+
+    nmu=3
+    wmu=np.array([0.277778,0.444444,0.277778], dtype=float)
+    xmu=np.array([0.112702,0.500000,0.887298], dtype=float)
+
+    itran=0
+
+    sp1=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
+    sp2=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
+    sp3=np.zeros([nmu,nmu,nwave,ndep,ntimes],dtype=float)
+    a1=np.zeros([nwave,ndep,ntimes],dtype=float)
+    c1=np.zeros([nwave,ndep,ntimes],dtype=float)
+    p=np.zeros([nmu,nwave,ndep,ntimes],dtype=float)
+    pms=np.zeros([nwave,ndep,ntimes],dtype=float)
+    tauq=np.zeros([nwave,ndep,ntimes],dtype=float)
+    dtauq=np.zeros([nwave,ndep,ntimes],dtype=float)
+    jnu=np.zeros([nwave,ndep,ntimes],dtype=float)
+
+
+    cmu=0.5/xmu[0]
+    for k in range(ntimes):
+        for i in range(nwave):
+            #
+            # j=1: upper boundary
+            #
+            dtauq[i,1,k]=((x[i,0,k]+x[i,1,k])*(tau[k,1]-tau[k,0]))*cmu
+            a1[i,0,k]=1./dtauq[i,1,k]
+            t = tau[k,0]*x[i,0,k]*2.0*cmu
+            tauq[i,0,k]=t
+            dtauq[i,0,k]=t
+            dtauq[i,1:ndep,k]=(x[i,1:ndep,k]+x[i,0:ndep-1,k])*(tau[k,1:ndep]-tau[k,0:ndep-1])*cmu
+            for j in range(1,ndep): 
+                tauq[i,j,k]=tauq[i,j-1,k]+dtauq[i,j,k]
+            #
+            #  calculate a1 and c1
+            #
+            a1[i,1:ndep-1,k] = 2./(dtauq[i,1:ndep-1,k]+dtauq[i,2:ndep,k])/dtauq[i,1:ndep-1,k]
+            c1[i,1:ndep-1,k] = 2./(dtauq[i,1:ndep-1,k]+dtauq[i,2:ndep,k])/dtauq[i,2:ndep,k]
+
+            for mu in range(nmu):
+                xmu1=xmu[mu]/xmu[0]
+                xmu2=xmu1*xmu1
+
+                #
+                # k=1: upper boundary
+                #
+                t=tauq[i,0,k]/xmu1
+                if (t < 0.01):
+                    ex1=t*(1.-t*(0.5-t*(0.1666667-t*0.041666667)))
+                elif(t < 20.):
+                    ex1=1.-np.exp(-t) 
+                else:
+                    ex1=1.
+                    
+                ex = 1.-ex1
+                sp1[mu,mu,i,0,k] = 0.
+                sp2[mu,mu,i,0,k] = 1.0+2.0*xmu1*a1[i,0,k]
+                sp3[mu,mu,i,0,k] = -2.0*xmu2*a1[i,0,k]*a1[i,0,k]
+                fact = 1.0+2.0*xmu1*a1[i,0,k]*ex1
+                sp2[mu,mu,i,0,k] = sp2[mu,mu,i,0,k]/fact
+                sp3[mu,mu,i,0,k] = sp3[mu,mu,i,0,k]/fact
+                p[mu,i,0,k]=sc[i,0,k]
+                
+                #
+                # interior
+                #
+                sp1[mu,mu,i,1:ndep-1,k]=-xmu2*a1[i,1:ndep-1,k]
+                sp2[mu,mu,i,1:ndep-1,k]=1.0
+                sp3[mu,mu,i,1:ndep-1,k]=-xmu2*c1[i,1:ndep-1,k]
+                p[mu,i,1:ndep-1,k]=sc[i,1:ndep-1,k]
+                
+                #
+                # k=ndep: lower boundary
+                #
+                sp1[mu,mu,i,ndep-1,k]= -1.0                        
+                sp2[mu,mu,i,ndep-1,k]=dtauq[i,ndep-1,k]/xmu1+0.5*dtauq[i,ndep-1,k]**2/xmu2
+                sp3[mu,mu,i,ndep-1,k]=0.0
+                sk=(dtauq[i,ndep-1,k]/xmu1+0.5*dtauq[i,ndep-1,k]**2/xmu2)+1.0
+                p[mu,i,ndep-1,k]=sc[i,ndep-1,k]*sk - sc[i,ndep-2,k]
+
+                # 
+                # non-diagonal elements
+                #
+                for mu2 in range(nmu): 
+                    sp2[mu,mu2,i,0,k] = sp2[mu,mu2,i,0,k]-scat[i,0,k]*wmu[mu2]
+                    sp2[mu,mu2,i,1:ndep-1,k] = sp2[mu,mu2,i,1:ndep-1,k]-scat[i,1:ndep-1,k]*wmu[mu2]
+                    sp2[mu,mu2,i,ndep-1,k] = ( sp2[mu,mu2,i,ndep-1,k]-scat[i,ndep-1,k]*wmu[mu2]*sk + 
+                                               scat[i,ndep-2,k]*wmu[mu2])
+                    sp1[mu,mu2,i,ndep-1,k]= sp1[mu,mu2,i,ndep-1,k]+scat[i,ndep-2,k]*wmu[mu2]
+                    
+                #
+            # eliminate subdiagonal
+            #
+            for j in range(0,ndep-1): 
+                sp1p = sp1[:,:,i,j+1,k]
+                sp2k = sp2[:,:,i,j,k]
+                sp3k = sp3[:,:,i,j,k]
+                f = -np.matmul(sp1p,np.linalg.inv(sp2k-sp3k))
+                #f = -sp1p
+                p[:,i,j+1,k] = p[:,i,j+1,k]+np.matmul(f,(p[:,i,j,k]))
+                sp2[:,:,i,j+1,k] = sp2[:,:,i,j+1,k]+np.matmul(f,sp2k)
+                sp2[:,:,i,j,k] = sp2[:,:,i,j,k] - sp3[:,:,i,j,k]
+
+            sp2[:,:,i,ndep-1,k]=sp2[:,:,i,ndep-1,k]-sp3[:,:,i,ndep-1,k]
+
+            #
+            # backsubstitute
+            #
+            p[:,i,ndep-1,k] = np.matmul( np.linalg.inv(sp2[:,:,i,ndep-1,k])  ,p[:,i,ndep-1,k])
+
+
+            for j in range(ndep-2, -1, -1):
+                tmp = np.linalg.inv(sp2[:,:,i,j,k])
+                tmp2 = np.matmul(sp3[:,:,i,j,k],p[:,i,j+1,k])
+                tmp3 = p[:,i,j,k] - tmp2
+                p[:,i,j,k]= np.matmul( tmp, tmp3 )
+
+
+            for mu in range(nmu):
+                 jnu[i,:,k] = jnu[i,:,k] + wmu[mu]*p[mu,i,:,k]
+
+
+    return jnu
+
+
+def wnstark2(n=[],ne=[],n1=[],tg=[],
+                *args):
+
+    '''
+    The occupational probability. 
+    That is, the probability of an atom being perturbed by a net electric
+    microfield that is below the critical field strength that would 
+    dissolve/destroy level n. Used for Landau-Zener effects 
+    (see Kowalski et al 2015)
+    Parameters
+    __________
+    
+    n : float 
+        pseudo quantum number
+    ne : float
+         the electron density in height
+    n1 : float
+         the ground state H density in height
+    tg: float
+         the gas temperature in height
+    Graham Kerr, Feb 27th 2020
+    '''
+    
+    Zjk = 1.0e0 
+    Zr = 1.0e0 
+    el = 4.803e-10
+
+    a0 = 5.2981e-9
+    F0 = 1.25e-9 * Zjk * ne**(2./3.)
+
+    betacrit = (2.0e0 * n + 1.0e0) / (6.0e0 * n**4.0 * (n+1.0e0)**2) * el / (a0**2.0 * F0)
+
+    if n < 3: 
+        Kn = 1.0e0
+    else:
+        Kn = 16.0e0/3.0e0 * n / (n+1.0e0)**2.0
+
+    P1 = 0.1402e0
+    P2 = 0.1285e0
+    P3 = 1e0
+    P4 = 3.15e0
+    P5 = 4.0e0
+
+    a = 0.09e0 * (ne**(1.0e0/6.0e0)) / tg**0.5e0
+
+    X = (1.0e0 + P3*a)**P4
+    C1 = P1*(X + P5*Zr*a**3)
+    C2 = P2*X
+
+    lilf = C1 * betacrit**3 / (1.0e0 + C2 * betacrit**(1.5e0))
+
+    Q = lilf / (1.0e0+lilf)
+
+    wn_neutral = np.exp(-1.0e0 * 4.0e0 * np.pi/3.0e0 * n1 * (n**2.0e0*a0+a0)**3.0e0)
+
+    return wn_neutral*Q
+
+
+
+def poph2(cdf,*args):
+
+    '''
+    The population of H2 molecules from LTE dissociation 
+    equilibrium
+    Parameters
+    __________
+    
+    cdf :  
+         radynpy cdf output
+   
+    Graham Kerr, Feb 27th 2020
+    **** Could probably re-write to only input certain 
+         variables but for now they are all passed via
+         the cdf file
+    '''
+    grph = 2.2690989266985202e-24
+    nt = (cdf.time.shape)[0]
+    nh21t = np.zeros([nt, cdf.ndep])
+
+    for k in range(nt):
+        for j in range(cdf.ndep):
+
+            xkh2k,dxkh2k,eh2k,deh2k  = molfys(cdf.tg1[k,j])
+            a1 = 8.e0*cdf.d1[k,j]/grph/xkh2k
+           
+            if (a1 > 1.e-03): 
+                nh21t[k,j]=(4.e0*cdf.d1[k,j]/grph+xkh2k-xkh2k*np.sqrt(1.e0+a1))/8.e0
+            else:
+                a2=(cdf.d1[k,j]/grph)**2/xkh2k
+                a3=(cdf.d1[k,j]/grph)**3*4.e0/xkh2k/xkh2k
+                nh21t[k,j]=a2-a3
+
+    return nh21t
+
+
+
+
+
+def molfys(tg,*args):
+
+    '''
+    Gives the dissociation constant xkh2 (=n(h i)*n(h i)/n(h2) )
+    expressed in number per cm3, and the sum of dissociation, 
+    rotation and vibration energies, deh2 for h2 (expressed in 
+    ergs per molecule).
+    The data are from vardya, m.n.r.a.s. 129, 205 (1965) and earlier
+    references. the dissociation constant for h2 is from tsuji,
+    astron. astrophys. 1973.
+    The logarithmic temperature derivatives are also returned in
+    dxkh2 and deh2
+    Parameters
+    __________
+    
+    tg : float
+         the gas temperature
+   
+    Graham Kerr, Feb 27th 2020
+    '''
+    a1 = np.array([12.739e0,-5.1172e0,1.2572e-1,-1.4149e-2,6.3021e-4])
+    b1 = np.array([2.6757e0,-1.4772e0,0.60602e0,-0.12427e0,0.009750e0])
+    bk=1.380662e-16
+    ee=1.6021890e-12
+
+    te = np.zeros([5],dtype=float)
+    tes = np.zeros([7],dtype=float)
+    tex=5040.e0/tg
+    te[0]=1.e0
+    for k in range(1,5):
+        te[k]=te[k-1]*tex   
+    tes[2:7] = te
+    tes[1] = 1.e0/tex
+    tes[0] = te[1]/tex
+
+    # dissociation constant for h2
+    xkh2=0.e0
+    for k in range(5):
+        xkh2=a1[k]*te[k]+xkh2 
+    xkh2=10.e0**xkh2
+    xkh2=xkh2/bk/tg
+
+    # logarithmic temperature derivative of dissociation constant for h2
+    dxkh2=0.e0
+    for k in range(1,5):
+        dxkh2=k*a1[k]*te[k-1]+dxkh2 
+    dxkh2=-dxkh2*np.log(10.e0)*xkh2*tex
+    dxkh2=dxkh2-xkh2
+
+    # internal energy per molecule
+    eh2=0.e0
+    for k in range(5):
+        eh2=b1[k]*tes[2+k-1]+eh2
+    eh2=eh2*8.617e-5*5040.e0-4.476e0
+    eh2=eh2*ee
+
+    # logarithmic temperature derivative of internal energy
+
+    deh2=0.e0
+    for k in range(5): 
+        deh2=np.float(k-1)*b1[k]*tes[2+k-2]+deh2
+    deh2=-deh2*8.617e-5*5040.e0*tex
+    deh2=deh2*ee
+
+    return xkh2,dxkh2,eh2,deh2
+
+
+
+def closest_ind(x, y=[], *args):
+    '''
+    Finds the index in an array X such that X(ind) is
+    closest to y. Returns the index and the difference
+    Parameters
+    __________
+    
+    x :
+          an array 
+    y :
+          the value(s) within x to find
+   
+    Graham Kerr, March 2nd 2020
+    '''
+    numvals = len(y)
+    
+    inds = np.zeros([numvals],dtype=int)
+
+    for i in range(numvals):
+        inds[i] = (np.abs(x - y[i])).argmin()
+
+    diffs = x[inds] - y
+
+    return inds, diffs
+
+
+
+def tradiation(intens, lamb):
+    '''
+    Graham Kerr
+    NASA/GSFC
+    9th June 2021
+ 
+    NAME:               tradiation.py
+    
+    PURPOSE:            Convert from cgs intensity to the radiation temperature.
+                        That is, what would be the temperature of a blackbody that
+                        emits at the given intensity?
+
+    INPUTS:             intens -- float array
+                                  the intensity in units of erg/s/cm^2/sr/Hz
+                        lamb   -- float array
+                                  the wavelengh array in units of angstroms
+
+    OPTIONAL
+    INPUTS:             
+                      
+
+    OUTPUTS:            trad -- the intensity in units of K
+
+    
+    NOTES:              
+    '''
+
+    c = 2.99792458e10
+    h = 6.626176e-27
+    k = 1.380662e-16
+    l = lamb*1e-8
+    tRad = h * c / k / l / np.log(2.0 * h * c / intens / (l**3) + 1.0)
+
+    return tRad
+
+def tradiation_flux(flux, lamb):
+    '''
+    Graham Kerr
+    NASA/GSFC
+    9th June 2021
+ 
+    NAME:               tradiation.py
+    
+    PURPOSE:            Convert from cgs flux to the radiation temperature.
+                        That is, what would be the temperature of a blackbody that
+                        emits at the given intensity?
+
+    INPUTS:             flux -- float array
+                                  the flux in units of erg/s/cm^2/Hz
+                        lamb   -- float array
+                                  the wavelengh array in units of angstroms
+
+    OPTIONAL
+    INPUTS:             
+                      
+
+    OUTPUTS:            trad -- the intensity in units of K
+
+    
+    NOTES:              
+    '''
+
+    c = 2.99792458e10
+    h = 6.626176e-27
+    k = 1.380662e-16
+    l = lamb*1e-8
+    tRad_flux = h * c / k / l / np.log(2.0 * np.pi * h * c / flux / (l**3) + 1.0)
+
+    return tRad_flux

@@ -1,8 +1,10 @@
 import numpy as np
 from scipy import constants
 # import sys
+from radynpy.utils.Utils import tradiation as tr
+from radynpy.utils.Utils import tradiation_flux as tr_flux
 
-def profile(cdf, kr, t1 = 0, t2 = 0):
+def profile(cdf, kr, t1 = 0, t2 = 0, trad=False):
 
     '''
     A function to return the line intensity, flux, and wavelength
@@ -20,10 +22,13 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
           the final time at which to extract the line profile
           default = final time
           The output is a time series between t1-->t2
+    trad : boolean
+           set to True to output the line profiles in units of radiation temperature
+           default = false
     
 
     OUTPUTS:  out_dict: A dictionary containing the intensity, flux, and wavelength
-                        in units of [erg/s/cm^2/sr/A], [erg/s/cm^2/A], and [A]
+                        in units of [erg/s/cm^2/sr/A] (or K), [erg/s/cm^2/A], and [A]
                         Dimensions are: 
                             Intensity [time, viewing angle, wavelength]
                             Flux [time, wavelength]
@@ -73,10 +78,17 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
     # Extract the line intensity, then sum up the contribution to the line flux
     ########################################################################
 
-    for ind in range(1,cdf.nq[kr]+1):
-        for tind in range(nt):
-            line_int[tind,:,cdf.nq[kr]-ind] = cdf.outint[tind,ind,:,kr]*cdf.cc*1e8/wavel[ind-1]**2.0
-            line_flux[tind,cdf.nq[kr]-ind] = 2*pi*np.sum(cdf.outint[tind,ind,:,kr]*cdf.wmu*cdf.zmu)*cdf.cc*1e8/wavel[ind-1]**2.0
+    if trad == True:
+        for ind in range(1,cdf.nq[kr]+1):
+            for tind in range(nt):
+                for muind in range(cdf.nmu):
+                    line_int[tind,muind,cdf.nq[kr]-ind] = tr(cdf.outint[tind,ind,muind,kr], wavel[ind-1])
+                line_flux[tind,cdf.nq[kr]-ind] = tr_flux( (2*pi*np.sum(cdf.outint[tind,ind,:,kr]*cdf.wmu*cdf.zmu)), wavel[ind-1])
+    elif trad == False:
+        for ind in range(1,cdf.nq[kr]+1):
+            for tind in range(nt):
+                line_int[tind,:,cdf.nq[kr]-ind] = cdf.outint[tind,ind,:,kr]*cdf.cc*1e8/wavel[ind-1]**2.0
+                line_flux[tind,cdf.nq[kr]-ind] = 2*pi*np.sum(cdf.outint[tind,ind,:,kr]*cdf.wmu*cdf.zmu)*cdf.cc*1e8/wavel[ind-1]**2.0
 
     rest_wave = cdf.alamb[kr]
 
@@ -87,8 +99,10 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
     ########################################################################
     # Output the results
     ########################################################################
+   
+    if trad == False:
 
-    out_dict  = {'rest_wave':rest_wave,
+        out_dict  = {'rest_wave':rest_wave,
                  'wavelength':wavel,
                  'line_int':line_int,
                  'line_flux':line_flux,
@@ -97,8 +111,18 @@ def profile(cdf, kr, t1 = 0, t2 = 0):
                  'times':times,
                  'nq':cdf.nq[kr],
                  'Units':'int in [erg/s/cm^2/sr/A], flux in [erg/s/cm^2/A], wavelength in [A], t1,2 in[s]'}
+    
+    elif trad == True:
 
-
+        out_dict  = {'rest_wave':rest_wave,
+                 'wavelength':wavel,
+                 'line_int':line_int,
+                 'line_flux':line_flux,
+                 't1':t1, 't2':t2,
+                 'tind1':tind1,'tind2':tind2,
+                 'times':times,
+                 'nq':cdf.nq[kr],
+                 'Units':'int in [K], flux in [erg/s/cm^2/A], wavelength in [A], t1,2 in[s]'}
     return out_dict
 
 
