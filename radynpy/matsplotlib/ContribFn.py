@@ -8,11 +8,24 @@ from matplotlib.ticker import MaxNLocator, LogLocator, ScalarFormatter
 import warnings
 from radynpy.matsplotlib import xt_calc
 
-def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu=-1, 
-               heatPerParticle=False, wingOffset=None,
-               dvMouseover=False, withBackgroundOpacity=True, colors={}, 
-               tightenLayout=True, printMiscTopData=True, stdoutInfo=False, returnData=False,
-               opctabPath=None):
+def contrib_fn(
+    cdf,
+    kr,
+    tStep=0,
+    yRange=None,
+    vRange=None,
+    mu=-1,
+    heatPerParticle=False,
+    wingOffset=None,
+    dvMouseover=False,
+    withBackgroundOpacity=True,
+    colors=None,
+    tightenLayout=True,
+    printMiscTopData=True,
+    stdoutInfo=False,
+    returnData=False,
+    opctabPath=None,
+):
     '''
     Plots the contribution function of a transition. Based on the original 4
     panel Mats Carlsson plot, but using the 6 panel layout of Paulo Simoes.
@@ -25,7 +38,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         The RadynData object containing the data to compute the contribution function from.
         Due to the number of variables required, it is easier to use a LazyRadynData, if possible.
     kr : int
-        The transition index, see `index_convention` and `var_info` on the RadynData object for 
+        The transition index, see `index_convention` and `var_info` on the RadynData object for
         more information about what this means.
     tStep : int, optional
         The time index at which to compute the contribution function see 't' in the `index_convention`
@@ -63,7 +76,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
     tightenLayout : bool, optional
         Tighten the whitespace around the plots. (default: True)
     printMiscTopData : bool, optional
-        Add data describing the plot to the top of the figure (line, frequency, timestep...). (default: True) 
+        Add data describing the plot to the top of the figure (line, frequency, timestep...). (default: True)
     stdoutInfo : bool, optional
         Print progress information to stdout. (default: False)
     returnData : bool, optional
@@ -83,6 +96,11 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
             print('transition: %d -> %d' % (cdf.jrad[kr], cdf.irad[kr]))
             print('angle: %f degrees' % np.rad2deg(np.arccos(cdf.zmu[mu])))
             print('=============================')
+
+        if yRange is None:
+            yRange = [-0.08, 2.5]
+        if vRange is None:
+            vRange = [-300.0, 300.0]
 
         nDep = cdf.tg1.shape[1]
         iTrans = cdf.irad[kr] - 1
@@ -104,7 +122,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         # POSITIVE velocity is blueshift, towards shorter wavelength
         # NEGATIVE velocity is downflow, redshift, towards longer wavelength
         dVel = cdf.q[:nq, kr] * cdf.qnorm # frequency in km/s
-        vMax = np.abs(vRange).max() 
+        vMax = np.abs(vRange).max()
         wlIdxs = np.argwhere(np.abs(dVel) < vMax).ravel()
         nFreq = len(wlIdxs)
 
@@ -127,7 +145,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         for ny in range(nFreq):
             tau1[ny] = pchip_interpolate(np.log10(tauq_ny[1:, ny+ny0]), y[1:], 0.0)
 
-        # Build a silly 4D matrix to contain the data... this would probably just as well be 
+        # Build a silly 4D matrix to contain the data... this would probably just as well be
         # a list of 4 matrices given the way we use it
         zTot = np.zeros((nFreq, nDep, 2, 2))
         zTot[:, :, 0, 0] = (z1Local * z3).T # Xv / tau
@@ -141,7 +159,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         iwx = np.argwhere((x > np.min(vRange)) & (x < np.max(vRange))).flatten()
         vRange = [np.max(x[iwx]), np.min(x[iwx])] # invert x axis
 
-        # Find the deltav / frequency indices for the core and wing indices, 
+        # Find the deltav / frequency indices for the core and wing indices,
         # where the wingOffset is specified in Angstrom from the line core.
         coreIdx = np.argmin(np.abs(dVel[wlIdxs]))
         if wingOffset is None:
@@ -182,18 +200,18 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
             'wing': Blues_9.mpl_colors[3],
         }
 
-        choose_color = lambda col: colors[col] if col in colors else defaultColors[col]
+        choose_color = lambda col: colors[col] if colors is not None and col in colors else defaultColors[col]
 
         tauColor = choose_color('tau')
         vzColor = choose_color('vz')
-        svColor = choose_color('sv') 
+        svColor = choose_color('sv')
         bbColor = choose_color('bb')
         pop1Color = choose_color('pop1')
         pop2Color = choose_color('pop2')
         neColor = choose_color('ne')
         lineColor = choose_color('line')
         tempColor = choose_color('temp')
-        cfColor = choose_color('cf') 
+        cfColor = choose_color('cf')
         heatColor = choose_color('heat')
         coreColor = choose_color('core')
         wingColor = choose_color('wing')
@@ -246,10 +264,10 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         # Use histogram equalisation to improve contrast - thanks Paulo!
         zi = equalize_hist(zi)
 
-        # These plots are like images on irregular "pixel" centres, pcolormesh can handle this though, 
+        # These plots are like images on irregular "pixel" centres, pcolormesh can handle this though,
         # if we work out where the edges are
         xEdges = 0.5 * (x[iwx][:-1] + x[iwx][1:])
-        xEdges = np.insert(xEdges, 0, x[iwx][0]) 
+        xEdges = np.insert(xEdges, 0, x[iwx][0])
         xEdges = np.insert(xEdges, -1, x[iwx][-1])
 
         yEdges = 0.5 * (y[iwy][:-1] + y[iwy][1:])
@@ -260,21 +278,21 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
 
         # Link all the subplot axes and invert the x-axis for readability
         ax[0,0].invert_xaxis()
-        ax[0,0].get_shared_x_axes().join(ax[0,0], ax[1,0])
-        ax[0,0].get_shared_x_axes().join(ax[0,0], ax[2,0])
-        
-        # Save xlim as it can be clobbered by plotting some of the lines 
+        ax[1,0].sharex(ax[0, 0])
+        ax[2,0].sharex(ax[0, 0])
+
+        # Save xlim as it can be clobbered by plotting some of the lines
         lim = ax[0,0].get_xlim()
-        
+
         # Add the fluid velocity and tau=1 line
         ax[0,0].plot(cdf.vz1[tStep][iwy] * 1e-5, y[iwy], c=vzColor, ls='--', label=r'v$_\mathrm{z}$')
         ax[0,0].plot(x, tau1, c=tauColor, label=r'$\tau_\nu$=1')
 
-        
+
         # Add the extra info
-        # We now add the wl axis at the end of the image plots, since there are so many 
-        # things that seem to want to mess with the axis scale, and after plotting everything 
-        # we can set it for good, then add these extra axes, as they are computed relative 
+        # We now add the wl axis at the end of the image plots, since there are so many
+        # things that seem to want to mess with the axis scale, and after plotting everything
+        # we can set it for good, then add these extra axes, as they are computed relative
         # to the axis limits at the time of creation
 #         add_wl_axis(ax[0,0], label=True)
         add_legend(ax[0,0], loc='upper right')
@@ -338,7 +356,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         ax[2,0].tick_params('both', direction='in')
         add_image_label(ax[2,0], r'C$_\mathrm{I}$')
         add_legend(ax[2,0], loc='upper right')
-        
+
         # restore xlim from ages ago and add the wavelength axes
         ax[0,0].set_xlim(lim)
         add_wl_axis(ax[0,0], label=True)
@@ -365,7 +383,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
                 return ' '.join(l)
         labelI = make_label(iTrans)
         labelJ = make_label(jTrans)
-            
+
         popRange = (lambda v: [np.min(v), np.max(v)])(np.stack((pop1, pop2)))
         ax[0,1].plot(pop1, y[iwy], c=pop1Color, label=labelI)
         ax[0,1].plot(pop2, y[iwy], c=pop2Color, label=labelJ)
@@ -385,7 +403,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         # Black-body function
         # bb0 = blackbody_nu(Q(cdf.alamb[kr], 'Angstrom'), cdf.tg1[tStep, iwy])
         # bbTemp = np.log10(radiation_temperature(bb0.value, cdf.alamb[kr]))
-        # The radiation temperautre of a blackbody is simply its temperature, 
+        # The radiation temperautre of a blackbody is simply its temperature,
         # by definition, so we don't need the blackbody stuff
         bbTemp = np.log10(cdf.tg1[tStep])
         svTemp = np.log10(radiation_temperature(sv0, cdf.alamb[kr]))
@@ -407,14 +425,14 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         tauAx.set_xlabel(r'$\tau$')
         add_legend(ax[1,1])
 
-        # Plot 6: Heating, and Core and Wing Contribution Functions 
+        # Plot 6: Heating, and Core and Wing Contribution Functions
         heat = cdf.bheat1[tStep, iwy]
         if heatPerParticle:
             # Only using hydrogen density
             heat /= cdf.n1[tStep,:,:6,0].sum(axis=1)[iwy]
         contFn = np.copy(z)
         contFn = np.log10(contFn / np.max(contFn))
-        contFnRange = np.maximum([np.nanmin(contFn), np.nanmax(contFn)], np.nanmax(contFn) - 10.2) 
+        contFnRange = np.maximum([np.nanmin(contFn), np.nanmax(contFn)], np.nanmax(contFn) - 10.2)
 
         ax[2,1].plot(contFn[:,coreIdx], y[iwy], c=coreColor, label=r'Core C$_\mathrm{I}$')
         ax[2,1].plot(contFn[:,wingIdx], y[iwy], c=wingColor, label=r'Wing C$_\mathrm{i}$')
@@ -423,7 +441,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         ax[2,1].set_xlim(contFnRange)
 
 
-        # We have to scale heat manually since matplotlib doesn't realise it needs put the offset 
+        # We have to scale heat manually since matplotlib doesn't realise it needs put the offset
         # (e.g. x1e-8) at the top, and there's no way to move it
         heatAx = ax[2,1].twiny()
         if 1e-2 <= np.max(heat) <= 1e3:
@@ -435,7 +453,7 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
             scale = 10**power
             heat /= scale
             heatAx.plot(heat, y[iwy], c=heatColor)
-            offsetStr = '10$^\mathrm{%d}$ ' % power
+            offsetStr = r'10$^\mathrm{%d}$ ' % power
 
         ax[2,1].tick_params('both', direction='in')
         heatAx.tick_params('x', direction='in')
@@ -464,12 +482,12 @@ def contrib_fn(cdf, kr, tStep=0, yRange=[-0.08, 2.5], vRange=[300.0, -300.0], mu
         if tightenLayout:
             fig.set_constrained_layout_pads(h_pad=20.0/72.0, w_pad=0.01,
                                             hspace=-0.18, wspace=0.01)
-            
+
         if returnData:
-            out = {'atomId': cdf.atomid[iel], 
+            out = {'atomId': cdf.atomid[iel],
                    'kr': kr,
                    'iel': iel,
-                   'levels': [jTrans, iTrans], 
+                   'levels': [jTrans, iTrans],
                    'labels': [labelI, labelJ],
                    'emissivity': zTot[np.ix_(iwx, iwy)][:,:, 0, 0],
                    'opacity': zTot[np.ix_(iwx, iwy)][:,:, 0, 1],
