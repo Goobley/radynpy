@@ -63,7 +63,7 @@ def var_info_list(varList):
 
 class RadynData:
     '''
-    Container for the RADYN simulation data loaded from a CDF file. 
+    Container for the RADYN simulation data loaded from a CDF file.
     All required variables must be specified at construction.
     The loaded variables are added as attributes to constructed instance.
 
@@ -72,7 +72,7 @@ class RadynData:
     cdfPath : str
         The complete path to the CDF file
     varList : list of str or str
-        The variables to be loaded from the file. If '*' is passed then all will be loaded, 
+        The variables to be loaded from the file. If '*' is passed then all will be loaded,
         a single str will be the only variable loaded, and a list of strs will all be loaded.
     parseFilenameParams : bool, optional
         If the filename is in the F-CHROMA format then parse the heating parameters (default True)
@@ -89,7 +89,7 @@ class RadynData:
                 varList = allVars.keys()
             else:
                 varList = [varList]
-        
+
         assert(all(type(x) is str for x in varList))
         for var in varList:
             if not var in allVars:
@@ -112,7 +112,6 @@ class RadynData:
             for k in atts:
                 setattr(self, k, str(atts[k]))
         self.notLoadedVars = notLoadedVars
-        cdf.close()
 
         cdfFilename = os.path.basename(cdfPath)
         if cdfFilename != 'radyn_out.cdf':
@@ -136,7 +135,7 @@ class RadynData:
             raise AttributeError('Array "%s" was not requested to be loaded' % name)
         else:
             raise AttributeError('Unknown attribute "%s" requested' % name)
-    
+
     def index_convention(self):
         '''
         Return a string explaining the RADYN index convention.
@@ -150,8 +149,8 @@ class RadynData:
         Parameters
         ----------
         var : str or list of str
-            Specifies the variable to return information about. 
-            '*' will return information on all variables, and a list of variables can also be requested. 
+            Specifies the variable to return information about.
+            '*' will return information on all variables, and a list of variables can also be requested.
         '''
         return var_info(var)
 
@@ -168,7 +167,7 @@ class RadynData:
 
 class LazyRadynData:
     '''
-    Container for the RADYN simulation data lazily loaded from a CDF file. 
+    Container for the RADYN simulation data lazily loaded from a CDF file.
     Variables are loaded as required when used as atrtributes.
     The loaded variables are added as attributes to constructed instance.
 
@@ -231,7 +230,7 @@ class LazyRadynData:
         '''
         var = self.cdf.varget(name)
         setattr(self, name, var)
-    
+
     def index_convention(self):
         '''
         Return a string explaining the RADYN index convention.
@@ -245,8 +244,8 @@ class LazyRadynData:
         Parameters
         ----------
         var : str or list of str
-            Specifies the variable to return information about. 
-            '*' will return information on all variables, and a list of variables can also be requested. 
+            Specifies the variable to return information about.
+            '*' will return information on all variables, and a list of variables can also be requested.
         '''
         return var_info(var)
 
@@ -259,17 +258,4 @@ class LazyRadynData:
             else:
                 s += ('  %s: %s\n' % (info[0], info[1].replace('\n', '\n    ')))
         return s
-
-    def close(self):
-        '''
-        Closes the CDF file, if it is open. Should only be called when the object is no longer required.
-        '''
-        if self.cdf is not None:
-            self.cdf.close()
-            self.cdf = None
-
-    def __del__(self):
-        self.close()
-
-
 
